@@ -223,7 +223,8 @@ class Opset:
         
             * iterator()           : itère sur tous les fichiers.
             * iterator(nb)         : itère sur les nb premiers fichiers.
-            * iterator(first,last) : itère sur une partie des fichiers (first inclu, pas last)
+            * iterator(first,last) : itère sur une partie des fichiers 
+                                     (first inclu, pas last)
             * iterator(iterable)   : itère sur une liste.
         
             :param first: le premier élément  itérer (commence à 0) ou un itérable.
@@ -259,17 +260,27 @@ class Opset:
             return self.records[self.sigpos]
  
 
+    def clean(self):
+        """ Réinitialise le fichier."""
+        
+        if os.path.exists(self.storename):
+            os.remove(self.storename)
+        self.__init__(self.storename)
+        
+        
     def put(self,df,record=None):
         """ Stocke le signal dans le fichier.
         
             :param df:     le signal à stocker.
             :param record: l'enregistrement du signal 
+            :param reset:  recrée un fichier vide.
 
             Si aucun nom d'enregistrement n'est donné on regarde df.index.name.
             Si le nom de l'enregistrement n'existe pas il est rajouté.
             
             L'Opset est alors positionné sur cet enregistrement.
         """
+
         if record is None:
             if (not df.index.name) or len(df.index.name)==0:
                 raise OpsetError(self.storename, "Record name is missing.")
@@ -293,16 +304,20 @@ class Opset:
         
             Cette fonction définit les différents éléments de l'affichage. 
 
-            :param phase:   le nom d'une colonne binaire contenant les points à mettre en évidence si besoin.
-            :param sigpos:  le numéro du signal à afficher en premier sinon le premier ignal du fichier.
-            :param colname: le nom de la variable à afficher en premier sinon la premiere variable du premier signal.
+            :param phase:   le nom d'une colonne binaire contenant les points à mettre
+                            en évidence si besoin.
+            :param sigpos:  le numéro du signal à afficher en premier sinon le premier
+                            signal du fichier.
+            :param colname: le nom de la variable à afficher en premier sinon la
+                            premiere variable du premier signal.
 
             On la décompose de la fonction `plot` pour avoir plus de flexibilité
             si on souhaite dériver la classe et proposer d'autres interfaces graphiques.
 
             Cette version crée 6 objets :
 
-            * `figure`:             la figure contenat les axes où l'on affiche la courbe.
+            * `figure`:             la figure contenat les axes où l'on affiche la
+                                    courbe.
             * `variable_dropdown`:  une liste de variables.
             * `signal_slider`:      la scrollbar correspondant aux différents signaux.
             * `previous_button`:    le bouton 'précédent'.
@@ -310,12 +325,16 @@ class Opset:
             * `update_function`:    la fonction de mise à jour de l'affichage.
 
             La mise à jour d el'affichage se fait par le callback `update_function`.
-            Dans sa version de base elle est exécutée par l'appel à la fonction `interactive`:
+            Dans sa version de base elle est exécutée par l'appel à la fonction
+            `interactive`:
 
-              out =  widgets.interactive(update_function,colname=variable_dropdown,sigpos=signal_slider)
+              out =  widgets.interactive(update_function,
+                                        colname=variable_dropdown,
+                                        sigpos=signal_slider)
 
             Si l'on modifie cette fonction il faudra d'abord stocker sa valeur
-            puis appeler l'appeler avec les objets correspondants si on souhaite qu'ils restent actifs.
+            puis appeler l'appeler avec les objets correspondants si on souhaite
+            qu'ils restent actifs.
 
             :return: le dictionnaire d'éléments utiles à l'affichage décrit ci-dessus.
         """
