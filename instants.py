@@ -6,19 +6,26 @@ Des fonctions de gestion de l'extracteur d'instants.
 
 Created on Fri March 27 19:27:00 2020
 
-todo:: installer le module dans tabata.
+todo:: 
+
+- [ ] Normaliser la fonction de prédiction.
+- [ ] Faire un subplot de la fonction de prédiction.
+- [ ] Modifier `make_indicators` pour ne pas refaire les calculs après ajout
+        de nouveaux éléments.
+- [ ] Faire un calcul de synthèse avec régression logistique finale.
 
 @author: Jérôme Lacaille
 """
 
 __date__ = "2020-03-29"
-__version__ = '1.0.0'
+__version__ = '1.0.1'
 
 import os
 import numpy as np
 import pandas as pd
 import ipywidgets as widgets
 import plotly.graph_objs as go
+from plotly.subplots import make_subplots
 from scipy import signal
 from sklearn import tree
 from tabata.opset import Opset, nameunit
@@ -288,12 +295,12 @@ class Selector(Opset):
     def belief(self,filter_width=10):
         """ Calcul d'un indicateur de présomption de détection."""
         
+        df = self.df
         if self._clf is None:
-            return None
+            return np.zeros(df.index.shape)
         clf = self._clf
         
         # On crée les indicateurs.
-        df = self.df
         a = np.arange(0,len(df))
         C = np.vstack((a,np.flip(a), a/(len(df)-1)))
         for colname, l, d, es, eps in self.idcodes[3:]:
@@ -319,9 +326,36 @@ class Selector(Opset):
         
         # self.sigpos et self.colname sont mis à jour, 
         # ne pas utiliser ces variables ensuite.
-        f = e['figure']
+        f = self.figure
         old_update = e['update_function']
         
+        # Rajout de la probabilité de trouver l'isntant.
+        if True:
+            fig = make_subplots(rows=2, cols=1,
+                            shared_xaxes=True,
+                            vertical_spacing=0.03,
+                            specs=[[{"type": "scatter"}],
+                                   [{"type": "scatter"}]])
+            for tr in f.data:
+                fig.add_trace(tr, row=1, col=1)
+
+            p = self.belief()
+            fig.add_trace(go.Scatter(x=self.df.index, y=p), row=2, col=1)
+            
+            fig.update_yaxes(domain=(0.315, 1.0), row=1, col = 1)
+            fig.update_yaxes(domain=(0.0, 0.285), row=2, col = 1)
+            
+            fig.layout.title = f.layout.title
+            fig.layout.xaxis2.title = f.layout.xaxis.title
+            fig.layout.yaxis.title = f.layout.yaxis.title
+            fig.layout.titlefont = f.layout.titlefont
+            fig.layout.xaxis2.titlefont.color = "blue"
+            fig.layout.yaxis.titlefont.color = "blue"
+            
+            fig.update_layout(showlegend=False)
+
+            self.figure = go.FigureWidget(fig)
+
     
         def update_plot(colname, sigpos):
             """ Mise à jour de l'affichage.
@@ -329,6 +363,7 @@ class Selector(Opset):
                 On rajoute des barres verticales pour identifier les 
                 instants sélectionnés.
             """
+            f = self.figure
             old_update(colname,sigpos)
             
             self.viewed.add(sigpos)
@@ -338,34 +373,46 @@ class Selector(Opset):
                 x0 = self.df.index[i]
                 y0 = min(self.df[colname])
                 y1 = max(self.df[colname])
-                shapes+= [{'type': 'line',
-                           'x0': x0,
-                           'y0': y0,
-                           'x1': x0,
-                           'y1': y1,
-                           'line': {'color': 'rgb(171, 50, 96)',
-                                    'width': 2,
-                                    'dash': 'dashdot'}}]
+                f.add_shape(type='line',
+                                  x0=x0, y0=y0, x1=x0, y1=y1,
+                                  line= {'color': 'rgb(171, 50, 96)',
+                                        'width': 2,
+                                        'dash': 'dashdot'},
+                                  row=1, col=1)
+                #shapes+= [{'type': 'line',
+                #           'x0': x0,
+                #           'y0': y0,
+                #           'x1': x0,
+                #           'y1': y1,
+                #           'line': {'color': 'rgb(171, 50, 96)',
+                #                    'width': 2,
+                #                    'dash': 'dashdot'}}]
             if self.sigpos in self.computed:
                 i = self.computed[self.sigpos][1]
                 x0 = self.df.index[i]
                 y0 = min(self.df[colname])
                 y1 = max(self.df[colname])
-                shapes+= [{'type': 'line',
-                           'x0': x0,
-                           'y0': y0,
-                           'x1': x0,
-                           'y1': y1,
-                           'line': {'color': 'rgb(96, 50, 171)',
-                                    'width': 2,
-                                    'dash': 'dashdot'}}]
-            f.layout.shapes = shapes
+                f.add_shape(type='line',
+                                  x0=x0, y0=y0, x1=x0, y1=y1,
+                                  line= {'color': 'rgb(96, 50, 171)',
+                                        'width': 2,
+                                        'dash': 'dashdot'},
+                                  row=1, col=1)
+                #shapes+= [{'type': 'line',
+                #           'x0': x0,
+                #           'y0': y0,
+                #           'x1': x0,
+                #           'y1': y1,
+                #           'line': {'color': 'rgb(96, 50, 171)',
+                #                    'width': 2,
+                #                    'dash': 'dashdot'},
+                #           'xaxis'='x', 
+                #           'yaxis'='y'}]
+            #f.layout.shapes = shapes
         
         
         def selection_fn(trace, points, selector):
             """ Le callback qui permet de sélectionner un instant.
-            
-                todo:: factoriser l'affichage avec update
             """
             if len(points.point_inds)>0:
                 i0 = points.point_inds[0]
@@ -411,6 +458,6 @@ class Selector(Opset):
         boxes = widgets.VBox(
             [widgets.HBox([e['variable_dropdown'], 
                           e['previous_button'], e['next_button']]),
-             widgets.HBox([e['figure'], e['signal_slider']])])
+             widgets.HBox([self.figure, e['signal_slider']])])
         
         return boxes

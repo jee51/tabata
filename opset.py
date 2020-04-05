@@ -206,6 +206,8 @@ class Opset:
         self.colname = colname
         self.phase = ""
 
+        self.figure = None
+        
         
     def __repr__(self):
         """ Affichage du nom de l'Opset et de la liste des instants selectionnés."""
@@ -304,29 +306,32 @@ class Opset:
         
             Cette fonction définit les différents éléments de l'affichage. 
 
-            :param phase:   le nom d'une colonne binaire contenant les points à mettre
-                            en évidence si besoin.
-            :param sigpos:  le numéro du signal à afficher en premier sinon le premier
-                            signal du fichier.
-            :param colname: le nom de la variable à afficher en premier sinon la
-                            premiere variable du premier signal.
+            :param phase:   le nom d'une colonne binaire contenant les
+                            points à mettre en évidence si besoin.
+            :param sigpos:  le numéro du signal à afficher en premier sinon
+                            le premier signal du fichier.
+            :param colname: le nom de la variable à afficher en premier
+                            sinon la premiere variable du premier signal.
 
-            On la décompose de la fonction `plot` pour avoir plus de flexibilité
-            si on souhaite dériver la classe et proposer d'autres interfaces graphiques.
+            On la décompose de la fonction `plot` pour avoir plus de
+            flexibilité si on souhaite dériver la classe et proposer
+            d'autres interfaces graphiques.
 
             Cette version crée 6 objets :
 
-            * `figure`:             la figure contenat les axes où l'on affiche la
-                                    courbe.
+            * `figure`:             la figure contenat les axes où l'on 
+                                    affiche la courbe.
             * `variable_dropdown`:  une liste de variables.
-            * `signal_slider`:      la scrollbar correspondant aux différents signaux.
+            * `signal_slider`:      la scrollbar correspondant aux
+                                    différents signaux.
             * `previous_button`:    le bouton 'précédent'.
             * `next_button`:        le bouton 'suivant'.
-            * `update_function`:    la fonction de mise à jour de l'affichage.
+            * `update_function`:    la fonction de mise à jour de 
+                                    l'affichage.
 
-            La mise à jour d el'affichage se fait par le callback `update_function`.
-            Dans sa version de base elle est exécutée par l'appel à la fonction
-            `interactive`:
+            La mise à jour d el'affichage se fait par le callback 
+            `update_function`. Dans sa version de base elle est exécutée
+            par l'appel à la fonction `interactive`:
 
               out =  widgets.interactive(update_function,
                                         colname=variable_dropdown,
@@ -336,7 +341,8 @@ class Opset:
             puis appeler l'appeler avec les objets correspondants si on souhaite
             qu'ils restent actifs.
 
-            :return: le dictionnaire d'éléments utiles à l'affichage décrit ci-dessus.
+            :return: le dictionnaire d'éléments utiles à l'affichage décrit
+            ci-dessus.
         """
 
         # Mise à jour du signal.
@@ -362,12 +368,13 @@ class Opset:
         data = [go.Scatter(x=self.df.index, y=self.df[self.colname])]
         if self.phase is not None:
             ind = self.df[self.phase]
-            data.append(go.Scatter(x=self.df.index[ind], y=self.df[self.colname][ind],
+            data.append(go.Scatter(x=self.df.index[ind], 
+                                   y=self.df[self.colname][ind],
                                    line={'color':'red'}))
         
         # Description de la figure graphique.
         layout = go.Layout(width=500, height=400, showlegend=False)                           
-        f = go.FigureWidget(data, layout)
+        self.figure = go.FigureWidget(data, layout)
 
                            
         def update_plot(colname, sigpos):
@@ -382,6 +389,7 @@ class Opset:
                 self.df = pd.read_hdf(self.storename, self.records[sigpos])
 
             # Mise à jour des courbes.
+            f = self.figure
             f.layout.shapes = []
             scatter = f.data[0]
             scatter.x = self.df.index
@@ -410,7 +418,8 @@ class Opset:
                                orientation='vertical',
                                description='Record',
                                layout=widgets.Layout(height='400px'))
-        # Il suffira d'exécuter la commande suivante une fois que les gadgets seront disposés à l'écran :
+        # Il suffira d'exécuter la commande suivante une fois que les gadgets
+        # seront disposés à l'écran :
         #   out = widgets.interactive(update_plot, colname=wd, sigpos=ws)
 
         # Callbacks des boutons Previous et Next.
@@ -429,8 +438,7 @@ class Opset:
         # boxes = widgets.VBox([widgets.HBox([wd, wbp, wbn]),
         #                       widgets.HBox([f, ws])])
         update_plot(self.colname, self.sigpos)
-        return dict(figure = f,
-                    variable_dropdown = wd,
+        return dict(variable_dropdown = wd,
                     signal_slider = ws,
                     previous_button = wbp,
                     next_button = wbn,
@@ -440,10 +448,12 @@ class Opset:
     def plot(self,phase=None,sigpos=None,colname=None):
         """ Affichage de l'interface.
         
-            La fonction plot commence par créer les différents éléments par un passage de ses
-            paramètres à `make_figure`, puis elle doit mettre en oeuvre l'interactivité par 
-            un appel à `interactive` et construire le look de l'interface en positionnant les 
-            objets. Il est aussi possible de modifier le `layout`de la figure.
+            La fonction plot commence par créer les différents éléments par
+            un passage de ses paramètres à `make_figure`, puis elle doit
+            mettre en oeuvre l'interactivité par un appel à `interactive`
+            et construire le look de l'interface en positionnant les 
+            objets. Il est aussi possible de modifier le `layout`de la 
+            figure.
 
             En entrée, les mêmes paramètres que `make_figure`,
             et en sortie une organisation des éléments dans une boite.
@@ -454,7 +464,8 @@ class Opset:
                                   sigpos=e['signal_slider'])
         
         boxes = widgets.VBox([widgets.HBox([e['variable_dropdown'], 
-                                            e['previous_button'], e['next_button']]),
-                              widgets.HBox([e['figure'], e['signal_slider']])])
+                                            e['previous_button'], 
+                                            e['next_button']]),
+                              widgets.HBox([self.figure, e['signal_slider']])])
         
         return boxes
