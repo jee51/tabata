@@ -12,6 +12,10 @@ la recherche.
 * Le Selector est une classe permettant de visualiser interactivement le contenu.
 * Le Selector permet aussi de sélectionner des points sur des courbes.
 
+**Versions**
+
+1.0.3 - Algorithmes d'instants.
+
 
 Created on Wed May  9 16:50:34 2018
 
@@ -19,7 +23,7 @@ Created on Wed May  9 16:50:34 2018
 """
 
 __date__ = "2020-03-30"
-__version__ = '1.0.2'
+__version__ = '1.0.3'
 
 import os
 import numpy as np
@@ -395,9 +399,12 @@ class Opset:
         # Description de la figure graphique.
         f.update_layout(width=500, height=400, showlegend=False)
       
-                           
+        
+        # ---- Callback ----
         def update_plot(colname, sigpos):
-            """ La fonction d'interactivité avec les gadgets."""
+            """ La fonction d'interactivité avec les gadgets.
+                Ce callback utilise la continuation de la figure `f`. 
+            """
             
             self.colname = colname
             name, unit = nameunit(colname)
@@ -410,48 +417,40 @@ class Opset:
             # Mise à jour des courbes.
             f.update_traces(selector=dict(name="value"),
                             x = self.df.index, y = self.df[self.colname])
-            #scatter = f.data[0]
-            #scatter.x = self.df.index
-            #scatter.y = self.df[self.colname]
             if self.phase is not None:
                 ind = self.df[self.phase]
                 f.update_traces(selector=dict(name="phase"),
                                 x = self.df.index[ind],
                                 y = self.df[self.colname][ind])
-                #scatter2 = f.data[1]
-                #scatter2.x = self.df.index[ind]
-                #scatter2.y = self.df[self.colname][ind]
 
             # Mise à jour des titres et labels.
-            f.layout.title = name
-            f.layout.xaxis.title = self.df.index.name + '[' + str(self.sigpos) + ']'
-            f.layout.yaxis.title = unit
-            f.layout.titlefont = {'color': "blue"}
-            f.layout.xaxis.titlefont.color = "blue"
-            f.layout.yaxis.titlefont.color = "blue"
+            f.update_layout(title=self.df.index.name, yaxis_title=name + '  [ ' + unit + ' ]')
+        # ---- Calback ----
          
+            
         # Construction des gadgets interactifs.
         wd = widgets.Dropdown(options=self.df.columns,
                               value=self.colname,
                               description="Variable :")
         wbp = widgets.Button(description='Previous')
         wbn = widgets.Button(description='Next')
-        ws = widgets.IntSlider(value=self.sigpos, min=0, max=nbmax-1, step=-1,
+        ws = widgets.IntSlider(value=self.sigpos, min=0, max=nbmax-1, step=1,
                                orientation='vertical',
                                description='Record',
-                               layout=widgets.Layout(height='400px'))
-        # Il suffira d'exécuter la commande suivante une fois que les gadgets
-        # seront disposés à l'écran :
-        #   out = widgets.interactive(update_plot, colname=wd, sigpos=ws)
+                               continuous_update=False,
+                               layout=widgets.Layout(height='360px'))
 
-        # Callbacks des boutons Previous et Next.
+
+        # ---- Callback ----
         def wb_on_click(b):
+            """ Callbacks des boutons Previous et Next."""
             if b.description == 'Previous':
                 if ws.value > 0:
                     ws.value -= 1
             if b.description == 'Next':
                 if ws.value < ws.max:
                     ws.value += 1
+        # ---- Callback ----
 
         wbp.on_click(wb_on_click)
         wbn.on_click(wb_on_click)

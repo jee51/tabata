@@ -4,15 +4,19 @@ INSTANTS - Extracteur d'instants.
 
 Des fonctions de gestion de l'extracteur d'instants.
 
-Created on Fri March 27 19:27:00 2020
-
 todo:: 
 
-- [ ] Normaliser la fonction de prédiction.
-- [ ] Faire un subplot de la fonction de prédiction.
 - [ ] Modifier `make_indicators` pour ne pas refaire les calculs après ajout
         de nouveaux éléments.
+- [ ] Vérifier que le `load` dispose des variables utiles dans le `_clf`.
 - [ ] Faire un calcul de synthèse avec régression logistique finale.
+
+**Versions**
+
+1.0.3 - Algorithmes.
+
+
+Created on Fri March 27 19:27:00 2020
 
 @author: Jérôme Lacaille
 """
@@ -28,7 +32,7 @@ import plotly.graph_objs as go
 from plotly.subplots import make_subplots
 from scipy import signal
 from sklearn import tree
-from tabata.opset import Opset, nameunit
+from tabata.opset import Opset, nameunit, OpsetError
 
 
 ###########################################################################
@@ -141,18 +145,22 @@ class Selector(Opset):
     
     def clear_selection(self):
         """ Réinitialise la liste des sélections et observations."""
-        self.op_viewed.clear()
-        self.sel_instants.clear()
+        self.viewed.clear()
+        self.selected.clear()
         self.computed.clear()
         
-        
+    
+    # ================== Apprentissage ====================================
     def make_indicators(self, 
                         idfilename=None,
                         range_width = None,
                         range_sigma = None,
                         max_order=2):
         """ Construction de l'Opset des indicateurs."""
-        
+
+        if not self.selected:
+            raise OpsetError(self.storename,"Nothing to learn !")
+            
         # Nom du fichier de sauvegarde
         if idfilename is None:
             i = self.storename.find('.')
@@ -252,7 +260,7 @@ class Selector(Opset):
         return dsi
     
     
-    def fit(self,percent=0.01, min_samples_split=0.05):
+    def fit(self,retry=1, samples_percent=0.01, min_samples_split=0.05):
         """ Apprend un arbre de décision basé sur les indicateurs.
             
             :param percent: le pourcentage de points tirés par signal pour
@@ -268,31 +276,44 @@ class Selector(Opset):
             dsi = self._dsi
         
         # Fabrication des données d'apprentissage.
-        p = percent # Pourcentage de positions tirées.
-        X = []
-        Y = []
-        i0 = 0
-        for df in dsi.iterator():
-            n = len(df)
-            var,ind = dsi.computed[dsi.sigpos]
-            pos = np.random.choice(np.arange(n),int(np.ceil(n*p)))
-            x = df.iloc[pos]
-            x.index = range(i0,i0+len(x))
-            y = pd.DataFrame(1 - 2*(pos<=ind), index=x.index, columns=['TARGET'])
-            i0 = i0+len(x)
-            Y.append(y)
-            X.append(x)
-        dfx = pd.concat(X)
-        dfy = pd.concat(Y)
+        def find_best_parameters(p,split):
+            X = []
+            Y = []
+            i0 = 0
+            for df in dsi.iterator():
+                n = len(df)
+                var,ind = dsi.computed[dsi.sigpos]
+                pos = np.random.choice(np.arange(n),int(np.ceil(n*p)))
+                x = df.iloc[pos]
+                x.index = range(i0,i0+len(x))
+                y = pd.DataFrame(1 - 2*(pos<=ind), index=x.index, columns=['TARGET'])
+                i0 = i0+len(x)
+                Y.append(y)
+                X.append(x)
+            dfx = pd.concat(X)
+            dfy = pd.concat(Y)
 
-        # Création du modèle.
-        clf = tree.DecisionTreeClassifier(min_samples_split=min_samples_split)
-        clf = clf.fit(dfx,dfy)
-        self._clf = clf
-        return clf
+            # Création du modèle.
+            clf = tree.DecisionTreeClassifier(min_samples_split=split)
+            clf = clf.fit(dfx,dfy)
+
+            return clf.feature_importances_
+    
+        fi = np.zeros(len(dsi.df.columns))
+        for k in range(retry):
+            fi +=  find_best_parameters(samples_percent,min_samples_split)
+        seuil = np.percentile(fi,80)
+        var = fi>seuil
+        
+        """
+        todo::
+            Refaire l'apprentissage sur un nombre restreint de variables et mettre à joir idcodes.
+                
+        """
+        return fi
     
     
-    def belief(self,filter_width=10):
+    def belief(self,filter_width=100):
         """ Calcul d'un indicateur de présomption de détection."""
         
         df = self.df
@@ -315,9 +336,25 @@ class Selector(Opset):
                                  window_length=2*filter_width+1,
                                  polyorder=2,
                                  deriv=1)
+        
+        p = np.maximum(p,0)
+        Z = p.sum()
+        if Z == 0.0:
+            Z=1.0
+        p /= Z
+        
         return p
-                                
-                                   
+                     
+    
+    def load(self,filename):
+        """ Recharge un nouveau fichier à analyser."""
+        ds = Selector(filename,self.phase)
+        ds.idcodes = self.idcodes
+        ds._clf = self._clf
+        
+        return ds
+        
+    # ====================== Affichages ===========================                              
     def make_figure(self,f,phase=None,pos=None,name=None):
         """ Création de l'interface graphique."""
 
@@ -335,20 +372,20 @@ class Selector(Opset):
         f.update_yaxes(domain=(0.315, 1.0), row=1, col = 1)
         f.update_yaxes(domain=(0.0, 0.285), row=2, col = 1)
         f.layout.xaxis2.titlefont.color = "blue"
-
-    
-        def update_plot(colname, sigpos):
+            
+            
+        # =================================================================
+        # ---- Begin: Callback Interactive  ----
+        def update_plot(colname, sigpos, width):
             """ Mise à jour de l'affichage.
                 
                 On rajoute des barres verticales pour identifier les 
                 instants sélectionnés.
             """
             old_update(colname,sigpos)
-            f.layout.xaxis2.title = f.layout.xaxis.title
-            f.layout.xaxis.title = ""
         
             # Mise à jour des probas.
-            f.update_traces(x=self.df.index, y=self.belief(), row=2)
+            f.update_traces(x=self.df.index, y=self.belief(width), row=2)
             
             self.viewed.add(sigpos)
             f.layout.shapes = []
@@ -374,8 +411,42 @@ class Selector(Opset):
                                         'width': 2,
                                         'dash': 'dashdot'},
                                   row=1, col=1)
+        # ---- End: Callback Interactive ----
         
+        # =================================================================
+        # Boutton pour l'apprentissage.
+        wbl = widgets.Button(description='Learn')
+        if self.selected:
+            if self._clf:
+                wbl.description = 'Relearn'
+                wbl.button_style = 'success'    
+            else:
+                wbl.description = 'Learn'
+                wbl.button_style = 'info'
+        else:
+            wbl.description = 'No Target'
+            wbl.button_style = 'danger'        
         
+        # ---- Callback ----
+        def wbl_on_click(b):
+            """ Callbacks du boutton d'apprentissage."""
+            b.button_style = 'warning'
+            b.description = 'Learning...'
+            if not self.selected:
+                b.description = 'No Target'
+                b.button_style = 'danger'
+            else:
+                self.fit()
+                update_plot(self.colname,self.sigpos,wf.value)
+                b.description = 'Relearn'
+                b.button_style = 'success'
+        # ---- Callback ----
+
+        wbl.on_click(wbl_on_click)
+
+        # =================================================================
+        # Sélection d'un point sur la courbe.
+        # ---- Calback ----
         def selection_fn(trace, points, selector):
             """ Le callback qui permet de sélectionner un instant.
             """
@@ -397,6 +468,17 @@ class Selector(Opset):
                     'width': 2,
                     'dash': 'dashdot'}}]
                 self.selected[self.sigpos] = (self.colname, i1)
+            if self.selected:
+                if self._clf:
+                    wbl.description = 'Relearn'
+                    wbl.button_style = 'success'    
+                else:
+                    wbl.description = 'Learn'
+                    wbl.button_style = 'info'
+            else:
+                wbl.description = 'No Target'
+                wbl.button_style = 'danger'        
+        # ---- Callback ----
         
         # Début de l'affichage.
         scatter = f.data[0]
@@ -405,11 +487,23 @@ class Selector(Opset):
             scatter2 = f.data[1]
             scatter2.on_click(selection_fn)
         
+        
+        # =================================================================
+        # Slider pour la largeur du filtre de croyance.
+        wf = widgets.IntSlider(value=10, min=10, max=500, step=10,
+                               orientation='horizontal',
+                               description='Filter',
+                               continuous_update=False,
+                               layout=widgets.Layout(width='400px'))
+        
+               
         # Afficher la barre si un signal est présent.
-        update_plot(self.colname,self.sigpos)
+        update_plot(self.colname,self.sigpos,wf.value)
 
         # On remplace la fonction d'update (que l'on avait d'abord copiée).
         e['update_function'] = update_plot 
+        e['filter_slider'] = wf
+        e['learn_button'] = wbl
         return e
     
     
@@ -424,11 +518,14 @@ class Selector(Opset):
         e = self.make_figure(f,phase,sigpos,colname)
         out = widgets.interactive(e['update_function'], 
                                   colname=e['variable_dropdown'], 
-                                  sigpos=e['signal_slider'])
+                                  sigpos=e['signal_slider'],
+                                  width=e['filter_slider'])
         
         boxes = widgets.VBox(
             [widgets.HBox([e['variable_dropdown'], 
                           e['previous_button'], e['next_button']]),
-             widgets.HBox([f, e['signal_slider']])])
+             widgets.HBox([f, e['signal_slider']]),
+             widgets.HBox([e['filter_slider'], e['learn_button']])
+            ])
         
         return boxes
