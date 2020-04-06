@@ -12,6 +12,7 @@ la recherche.
 * Le Selector est une classe permettant de visualiser interactivement le contenu.
 * Le Selector permet aussi de sélectionner des points sur des courbes.
 
+
 Created on Wed May  9 16:50:34 2018
 
 @author: Jérôme Lacaille
@@ -25,6 +26,7 @@ import numpy as np
 import pandas as pd
 import ipywidgets as widgets
 import plotly.graph_objs as go
+from plotly.subplots import make_subplots
 
 ###########################################################################
 class OpsetError(ValueError):
@@ -61,6 +63,32 @@ def byunits(cols,sep="["):
     return dnu
 
 
+def get_colname(columns,variable,default=0):
+    """ Récupère le nom complet de la variable.
+    
+        :param columns:  La liste des retours possibles.
+        :param variable: Le début du nom rechercé dans la liste.
+        :param default:  Un moyen de différentier si on veut une valeur 
+                            ou rien quand rien n'est trouvé.
+                            
+        Par défaut la fonction renvoie la première donnée.
+        En posant `Default=None` une entrée vide renvoie le vide.
+    """
+    
+    if default is not None and isinstance(default,int):
+        default = columns[default]
+    if not variable:
+        return default
+    
+    subs = [r for r in columns if variable in r]
+    if len(subs) > 0:
+        variable = subs[0]
+    else:
+        variable = default
+
+    return variable
+
+
 ###########################################################################
 #%% Fonctions d'affichage de signaux.
 def selplot(df, variable=None):
@@ -86,17 +114,7 @@ def selplot(df, variable=None):
         fig = go.Figure(data=data, layout=layout)
         fig.show()
 
-    if variable is not None:
-        columns = list(df.columns)
-        subs = [r for r in columns if variable in r]
-        if len(subs) > 0:
-            variable = subs[0]
-        else:
-            variable = columns[0]
-    else:
-        variable = df.columns[0]
-    if (variable is None) or (variable not in df.columns):
-        variable = df.columns[0]
+    variable = get_colname(list(df.columns),variable)
     wd = widgets.Dropdown(options=df.columns, value=variable, description="Variable :")
     widgets.interact(selected_plot, col=wd)
 
@@ -147,7 +165,8 @@ def byunitplot(df, yunit=None, xunit="date", title=""):
     if (yunit is None) or (yunit not in units):
         yunit = units[0]
     wu = widgets.Dropdown(options=units, value=yunit, description="Unité :")
-    wv = widgets.Dropdown(options=['All']+dnu[units[0]], value='All', description="Variables :")
+    wv = widgets.Dropdown(options=['All']+dnu[units[0]], 
+                          value='All', description="Variables :")
     #wu = widgets.Dropdown(options=["?"] + units, description="Unité :")
     #wv = widgets.Dropdown(options=['?'], description="Variables :")
     wu.layout = widgets.Layout(width='30%')
@@ -172,7 +191,7 @@ class Opset:
         algorithmes interactifs.
     """
 
-    def __init__(self, storename, sigpos=0, colname=""):
+    def __init__(self, storename, phase=None, pos=0, name=None):
         """ Initialisation de l'Opset.
         
             Le constructeur de l'Opset nécessite un fichier HDF5, si le fichier
@@ -180,8 +199,11 @@ class Opset:
             la méthode `put`.
 
             :param storename: le datatore correspondant à l'OPSET.
-            :param sigpos:    un numéro de signal à charger par défaut.
-            :param colname:   un nom de variable (colonne du signal) par défaut.
+            :param phase:     le nom d'une colonne binaire contenant les indices
+                                d'une pase particulière à surligner en rouge.
+            :param pos:       un numéro de signal à charger par défaut.
+            :param name:      le début d'un nom de variable (colonne du signal)
+                                par défaut.
         """
         
         if not os.path.isfile(storename): # Il faut créer le fichier.
@@ -192,21 +214,21 @@ class Opset:
         with pd.HDFStore(self.storename, mode='r') as store:
             self.records = store.keys()
             nbmax = len(self.records)
-            if (sigpos < 0) or (sigpos >= nbmax):
-                sigpos = 0
+            if (pos < 0) or (pos >= nbmax):
+                pos = 0
             if nbmax>0:
-                self.df = store[self.records[sigpos]]
-                if colname not in self.df.columns:
-                    colname = self.df.columns[0]
+                self.df = store[self.records[pos]]
+                colname = get_colname(self.df.columns,name)
+                phase = get_colname(self.df.columns,phase,default=None)
             else:
                 self.df = None
-                colname = ""
+                colname = None
+                phase = None
                 
-        self.sigpos = sigpos
+        self.sigpos = pos
         self.colname = colname
-        self.phase = ""
+        self.phase = phase
 
-        self.figure = None
         
         
     def __repr__(self):
@@ -301,16 +323,16 @@ class Opset:
         df.to_hdf(self.storename,record)
 
 
-    def make_figure(self,phase=None,sigpos=None,colname=None):
+    def make_figure(self,f,phase=None,pos=None,name=None):
         """ Crée l'affichage interactif des courbes.
         
             Cette fonction définit les différents éléments de l'affichage. 
 
             :param phase:   le nom d'une colonne binaire contenant les
                             points à mettre en évidence si besoin.
-            :param sigpos:  le numéro du signal à afficher en premier sinon
+            :param pos:     le numéro du signal à afficher en premier sinon
                             le premier signal du fichier.
-            :param colname: le nom de la variable à afficher en premier
+            :param name:    le nom de la variable à afficher en premier
                             sinon la premiere variable du premier signal.
 
             On la décompose de la fonction `plot` pour avoir plus de
@@ -350,32 +372,29 @@ class Opset:
         if nbmax==0:
             raise OpsetError(self.storename, "Opset is empty.")
         
-        if (sigpos is not None) and (sigpos >= 0) and (sigpos < nbmax) and (sigpos != self.sigpos):
-            self.sigpos = sigpos
+        if (pos is not None) and (pos >= 0) and (pos < nbmax) and (pos != self.sigpos):
+            self.sigpos = pos
         # On relit systématiquement le fichier au début au cas où une nouvelle colonne
         # serait ajoutée.
         self.df = pd.read_hdf(self.storename,self.records[self.sigpos])
 
-        if colname in self.df.columns:
-            self.colname = colname
-        elif self.colname not in self.df.columns:
-            self.colname = self.df.columns[0]
-        if (phase is not None) and (phase not in self.df.columns):
-            phase = None
-        self.phase = phase
-
+        self.colname = get_colname(self.df.columns,name)
+        self.phase = get_colname(self.df.columns,phase,default=None)
+        
         # Définition des données à afficher.
-        data = [go.Scatter(x=self.df.index, y=self.df[self.colname])]
-        if self.phase is not None:
+        f.add_trace(go.Scatter(x=self.df.index, y=self.df[self.colname],name="value"),
+                    row=1,col=1)
+        if self.phase:
             ind = self.df[self.phase]
-            data.append(go.Scatter(x=self.df.index[ind], 
+            f.add_trace(go.Scatter(x=self.df.index[ind], 
                                    y=self.df[self.colname][ind],
-                                   line={'color':'red'}))
+                                   name="phase",
+                                   line={'color':'red'}),
+                       row=1, col=1)
         
         # Description de la figure graphique.
-        layout = go.Layout(width=500, height=400, showlegend=False)                           
-        self.figure = go.FigureWidget(data, layout)
-
+        f.update_layout(width=500, height=400, showlegend=False)
+      
                            
         def update_plot(colname, sigpos):
             """ La fonction d'interactivité avec les gadgets."""
@@ -389,16 +408,19 @@ class Opset:
                 self.df = pd.read_hdf(self.storename, self.records[sigpos])
 
             # Mise à jour des courbes.
-            f = self.figure
-            f.layout.shapes = []
-            scatter = f.data[0]
-            scatter.x = self.df.index
-            scatter.y = self.df[self.colname]
+            f.update_traces(selector=dict(name="value"),
+                            x = self.df.index, y = self.df[self.colname])
+            #scatter = f.data[0]
+            #scatter.x = self.df.index
+            #scatter.y = self.df[self.colname]
             if self.phase is not None:
                 ind = self.df[self.phase]
-                scatter2 = f.data[1]
-                scatter2.x = self.df.index[ind]
-                scatter2.y = self.df[self.colname][ind]
+                f.update_traces(selector=dict(name="phase"),
+                                x = self.df.index[ind],
+                                y = self.df[self.colname][ind])
+                #scatter2 = f.data[1]
+                #scatter2.x = self.df.index[ind]
+                #scatter2.y = self.df[self.colname][ind]
 
             # Mise à jour des titres et labels.
             f.layout.title = name
@@ -445,7 +467,7 @@ class Opset:
                     update_function = update_plot)
     
     
-    def plot(self,phase=None,sigpos=None,colname=None):
+    def plot(self,phase=None,pos=None,name=None):
         """ Affichage de l'interface.
         
             La fonction plot commence par créer les différents éléments par
@@ -458,7 +480,9 @@ class Opset:
             En entrée, les mêmes paramètres que `make_figure`,
             et en sortie une organisation des éléments dans une boite.
         """
-        e = self.make_figure(phase,sigpos,colname)
+        f = make_subplots(rows=1, cols=1)
+        f = go.FigureWidget(f)
+        e = self.make_figure(f, phase,pos,name)
         out = widgets.interactive(e['update_function'], 
                                   colname=e['variable_dropdown'], 
                                   sigpos=e['signal_slider'])
@@ -466,6 +490,6 @@ class Opset:
         boxes = widgets.VBox([widgets.HBox([e['variable_dropdown'], 
                                             e['previous_button'], 
                                             e['next_button']]),
-                              widgets.HBox([self.figure, e['signal_slider']])])
+                              widgets.HBox([f, e['signal_slider']])])
         
         return boxes

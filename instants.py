@@ -18,7 +18,7 @@ todo::
 """
 
 __date__ = "2020-03-29"
-__version__ = '1.0.1'
+__version__ = '1.0.2'
 
 import os
 import numpy as np
@@ -118,9 +118,9 @@ class Selector(Opset):
         todo:: Recréer un classifieur avec juste les indicateurs nécessaires.
     """
 
-    def __init__(self, storename, sigpos=0, colname=""):
+    def __init__(self, storename, phase=None, pos=0, name=""):
         """ Initialise les listes d'instants et d'opération."""
-        Opset.__init__(self, storename, sigpos, colname)
+        Opset.__init__(self, storename, phase, pos, name)
         self.selected = dict()
         self.viewed = set()
         self.computed = dict()
@@ -318,43 +318,23 @@ class Selector(Opset):
         return p
                                 
                                    
-    def make_figure(self,phase=None,sigpos=None,colname=None):
+    def make_figure(self,f,phase=None,pos=None,name=None):
         """ Création de l'interface graphique."""
 
         # Récupération de l'interface de l'Opset.
-        e = Opset.make_figure(self,phase,sigpos,colname)
+        e = Opset.make_figure(self,f,phase,pos,name)
         
         # self.sigpos et self.colname sont mis à jour, 
         # ne pas utiliser ces variables ensuite.
-        f = self.figure
         old_update = e['update_function']
         
-        # Rajout de la probabilité de trouver l'isntant.
-        if True:
-            fig = make_subplots(rows=2, cols=1,
-                            shared_xaxes=True,
-                            vertical_spacing=0.03,
-                            specs=[[{"type": "scatter"}],
-                                   [{"type": "scatter"}]])
-            for tr in f.data:
-                fig.add_trace(tr, row=1, col=1)
+        # Affichage de la proba de présence
+        p = self.belief()
+        f.add_trace(go.Scatter(x=self.df.index, y=p), row=2, col=1)
 
-            p = self.belief()
-            fig.add_trace(go.Scatter(x=self.df.index, y=p), row=2, col=1)
-            
-            fig.update_yaxes(domain=(0.315, 1.0), row=1, col = 1)
-            fig.update_yaxes(domain=(0.0, 0.285), row=2, col = 1)
-            
-            fig.layout.title = f.layout.title
-            fig.layout.xaxis2.title = f.layout.xaxis.title
-            fig.layout.yaxis.title = f.layout.yaxis.title
-            fig.layout.titlefont = f.layout.titlefont
-            fig.layout.xaxis2.titlefont.color = "blue"
-            fig.layout.yaxis.titlefont.color = "blue"
-            
-            fig.update_layout(showlegend=False)
-
-            self.figure = go.FigureWidget(fig)
+        f.update_yaxes(domain=(0.315, 1.0), row=1, col = 1)
+        f.update_yaxes(domain=(0.0, 0.285), row=2, col = 1)
+        f.layout.xaxis2.titlefont.color = "blue"
 
     
         def update_plot(colname, sigpos):
@@ -363,11 +343,15 @@ class Selector(Opset):
                 On rajoute des barres verticales pour identifier les 
                 instants sélectionnés.
             """
-            f = self.figure
             old_update(colname,sigpos)
+            f.layout.xaxis2.title = f.layout.xaxis.title
+            f.layout.xaxis.title = ""
+        
+            # Mise à jour des probas.
+            f.update_traces(x=self.df.index, y=self.belief(), row=2)
             
             self.viewed.add(sigpos)
-            shapes = []
+            f.layout.shapes = []
             if self.sigpos in self.selected:
                 i = self.selected[self.sigpos][1]
                 x0 = self.df.index[i]
@@ -379,14 +363,6 @@ class Selector(Opset):
                                         'width': 2,
                                         'dash': 'dashdot'},
                                   row=1, col=1)
-                #shapes+= [{'type': 'line',
-                #           'x0': x0,
-                #           'y0': y0,
-                #           'x1': x0,
-                #           'y1': y1,
-                #           'line': {'color': 'rgb(171, 50, 96)',
-                #                    'width': 2,
-                #                    'dash': 'dashdot'}}]
             if self.sigpos in self.computed:
                 i = self.computed[self.sigpos][1]
                 x0 = self.df.index[i]
@@ -398,17 +374,6 @@ class Selector(Opset):
                                         'width': 2,
                                         'dash': 'dashdot'},
                                   row=1, col=1)
-                #shapes+= [{'type': 'line',
-                #           'x0': x0,
-                #           'y0': y0,
-                #           'x1': x0,
-                #           'y1': y1,
-                #           'line': {'color': 'rgb(96, 50, 171)',
-                #                    'width': 2,
-                #                    'dash': 'dashdot'},
-                #           'xaxis'='x', 
-                #           'yaxis'='y'}]
-            #f.layout.shapes = shapes
         
         
         def selection_fn(trace, points, selector):
@@ -450,7 +415,13 @@ class Selector(Opset):
     
     def plot(self,phase=None,sigpos=None,colname=None):
         """ On ajoute à l'affichage de l'Opset une sélection d'instants."""
-        e = self.make_figure(phase,sigpos,colname)
+        f = make_subplots(rows=2, cols=1,
+                          shared_xaxes=True,
+                          vertical_spacing=0.03,
+                          specs=[[{"type": "scatter"}],
+                                [{"type": "scatter"}]])
+        f = go.FigureWidget(f)
+        e = self.make_figure(f,phase,sigpos,colname)
         out = widgets.interactive(e['update_function'], 
                                   colname=e['variable_dropdown'], 
                                   sigpos=e['signal_slider'])
@@ -458,6 +429,6 @@ class Selector(Opset):
         boxes = widgets.VBox(
             [widgets.HBox([e['variable_dropdown'], 
                           e['previous_button'], e['next_button']]),
-             widgets.HBox([self.figure, e['signal_slider']])])
+             widgets.HBox([f, e['signal_slider']])])
         
         return boxes
