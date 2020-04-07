@@ -31,7 +31,7 @@ import ipywidgets as widgets
 import plotly.graph_objs as go
 from plotly.subplots import make_subplots
 from scipy import signal
-from sklearn import tree
+from sklearn import tree, linear_model
 from tabata.opset import Opset, nameunit, OpsetError
 
 
@@ -256,11 +256,16 @@ class Selector(Opset):
         # on conserve les instants sélectionnés.
         dsi.computed = dict(enumerate(zip(['__all__']*len(ind), ind)))
         dsi.rewind()
+        dsi.idcodes = self.idcodes
         self._dsi = dsi
         return dsi
     
     
-    def fit(self,retry=1, samples_percent=0.01, min_samples_split=0.05):
+    def fit(self,
+            retry_number=1, 
+            retry_percentile=80,
+            samples_percent=0.01, 
+            min_samples_split=0.05):
         """ Apprend un arbre de décision basé sur les indicateurs.
             
             :param percent: le pourcentage de points tirés par signal pour
@@ -276,7 +281,7 @@ class Selector(Opset):
             dsi = self._dsi
         
         # Fabrication des données d'apprentissage.
-        def find_best_parameters(p,split):
+        def find_best_parameters(p,split,cols=None):
             X = []
             Y = []
             i0 = 0
@@ -284,7 +289,10 @@ class Selector(Opset):
                 n = len(df)
                 var,ind = dsi.computed[dsi.sigpos]
                 pos = np.random.choice(np.arange(n),int(np.ceil(n*p)))
-                x = df.iloc[pos]
+                if cols:
+                    x = df.iloc[pos,cols]
+                else:
+                    x = df.iloc[pos]
                 x.index = range(i0,i0+len(x))
                 y = pd.DataFrame(1 - 2*(pos<=ind), index=x.index, columns=['TARGET'])
                 i0 = i0+len(x)
@@ -294,23 +302,33 @@ class Selector(Opset):
             dfy = pd.concat(Y)
 
             # Création du modèle.
-            clf = tree.DecisionTreeClassifier(min_samples_split=split)
+            if cols:
+                dfy = dfy.values.ravel()
+                clf = linear_model.LogisticRegression()
+            else:
+                clf = tree.DecisionTreeClassifier(min_samples_split=split)
             clf = clf.fit(dfx,dfy)
 
-            return clf.feature_importances_
+            return clf
+    
     
         fi = np.zeros(len(dsi.df.columns))
-        for k in range(retry):
-            fi +=  find_best_parameters(samples_percent,min_samples_split)
-        seuil = np.percentile(fi,80)
-        var = fi>seuil
+        for k in range(retry_number):
+            clf =  find_best_parameters(samples_percent,min_samples_split)
+            fi += clf.feature_importances_
+        seuil = np.percentile(fi,retry_percentile)
+        newcodes = {i:c for i,c in enumerate(dsi.idcodes) if fi[i]>seuil}
+        self.idcodes = list(newcodes.values())
         
-        """
-        todo::
-            Refaire l'apprentissage sur un nombre restreint de variables et mettre à joir idcodes.
-                
-        """
-        return fi
+        # Apprentissage final.
+        print("Keeping {} indicators over {}".format(len(self.idcodes),len(dsi.idcodes)))
+        keepcols = list(newcodes.keys())
+        clf = find_best_parameters(min(0.5,samples_percent*retry_number),
+                                   min_samples_split,
+                                   keepcols)
+        self._clf = clf
+
+        return clf
     
     
     def belief(self,filter_width=100):
@@ -322,13 +340,21 @@ class Selector(Opset):
         clf = self._clf
         
         # On crée les indicateurs.
+        C = np.ndarray((0,len(df)))
         a = np.arange(0,len(df))
-        C = np.vstack((a,np.flip(a), a/(len(df)-1)))
-        for colname, l, d, es, eps in self.idcodes[3:]:
-            a = df[colname].values
-            w = 2*l + 1
-            deg_poly = max(2,d)
-            c = indicator(a,w,d+1,es*eps,deg_poly)
+        for colname, l, d, es, eps in self.idcodes:
+            if l==0:
+                if colname=="LEN":
+                    c = a
+                elif colname == "REV":
+                    c = np.flip(a)
+                elif colname == "PERCENT":
+                    c = a/(len(df)-1)
+            else:
+                a = df[colname].values
+                w = 2*l + 1
+                deg_poly = max(2,d)
+                c = indicator(a,w,d+1,es*eps,deg_poly)
             C = np.vstack((C,c))
             
         ip = clf.predict(C.T) # Eventuellement pondérer.
@@ -414,6 +440,14 @@ class Selector(Opset):
         # ---- End: Callback Interactive ----
         
         # =================================================================
+        # Widgets pour l'apprentissage.
+        wtrn = widgets.IntText(description = "Retry", value = 10)
+        wtrp = widgets.IntText(description = "Percentile", value = 80)
+        wtsp = widgets.FloatText(description = "Sample", value = 0.01)
+        wtss = widgets.FloatText(description = "Split", value = 0.05)
+        
+        
+        # =================================================================
         # Boutton pour l'apprentissage.
         wbl = widgets.Button(description='Learn')
         if self.selected:
@@ -436,7 +470,7 @@ class Selector(Opset):
                 b.description = 'No Target'
                 b.button_style = 'danger'
             else:
-                self.fit()
+                self.fit(wtrn.value, wtrp.value, wtsp.value, wtss.value)
                 update_plot(self.colname,self.sigpos,wf.value)
                 b.description = 'Relearn'
                 b.button_style = 'success'
@@ -495,8 +529,8 @@ class Selector(Opset):
                                description='Filter',
                                continuous_update=False,
                                layout=widgets.Layout(width='400px'))
-        
-               
+           
+            
         # Afficher la barre si un signal est présent.
         update_plot(self.colname,self.sigpos,wf.value)
 
