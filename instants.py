@@ -31,7 +31,7 @@ import ipywidgets as widgets
 import plotly.graph_objs as go
 from plotly.subplots import make_subplots
 from scipy import signal
-from sklearn import tree, linear_model
+from sklearn import tree
 from tabata.opset import Opset, nameunit, OpsetError
 
 
@@ -302,11 +302,7 @@ class Selector(Opset):
             dfy = pd.concat(Y)
 
             # Création du modèle.
-            if cols:
-                dfy = dfy.values.ravel()
-                clf = linear_model.LogisticRegression()
-            else:
-                clf = tree.DecisionTreeClassifier(min_samples_split=split)
+            clf = tree.DecisionTreeClassifier(min_samples_split=split)
             clf = clf.fit(dfx,dfy)
 
             return clf
@@ -368,6 +364,9 @@ class Selector(Opset):
         if Z == 0.0:
             Z=1.0
         p /= Z
+        
+        mx = np.argmax(p)
+        self.computed[self.sigpos] = (self.colname,mx)
         
         return p
                      
@@ -434,19 +433,22 @@ class Selector(Opset):
                 f.add_shape(type='line',
                                   x0=x0, y0=y0, x1=x0, y1=y1,
                                   line= {'color': 'rgb(96, 50, 171)',
-                                        'width': 2,
-                                        'dash': 'dashdot'},
+                                        'width': 1,
+                                        'dash': 'dot'},
                                   row=1, col=1)
         # ---- End: Callback Interactive ----
         
         # =================================================================
         # Widgets pour l'apprentissage.
-        wtrn = widgets.IntText(description = "Retry", value = 10)
-        wtrp = widgets.IntText(description = "Percentile", value = 80)
-        wtsp = widgets.FloatText(description = "Sample", value = 0.01)
-        wtss = widgets.FloatText(description = "Split", value = 0.05)
-        
-        
+        wtrn = widgets.IntText(description = "Retry", value = 10,
+                               layout=widgets.Layout(width='140px'))
+        wtrp = widgets.IntText(description = "Percentile", value = 80,
+                              layout=widgets.Layout(width='140px'))
+        wtsp = widgets.FloatText(description = "Sample", value = 0.01,
+                                layout=widgets.Layout(width='140px'))
+        wtss = widgets.FloatText(description = "Split", value = 0.05,
+                                layout=widgets.Layout(width='140px'))
+                
         # =================================================================
         # Boutton pour l'apprentissage.
         wbl = widgets.Button(description='Learn')
@@ -538,6 +540,7 @@ class Selector(Opset):
         e['update_function'] = update_plot 
         e['filter_slider'] = wf
         e['learn_button'] = wbl
+        e['learn_param'] = [wtrn, wtrp, wtsp, wtss]
         return e
     
     
@@ -559,7 +562,8 @@ class Selector(Opset):
             [widgets.HBox([e['variable_dropdown'], 
                           e['previous_button'], e['next_button']]),
              widgets.HBox([f, e['signal_slider']]),
-             widgets.HBox([e['filter_slider'], e['learn_button']])
+             widgets.HBox([e['filter_slider'], e['learn_button']]),
+             widgets.HBox(e['learn_param'])
             ])
         
         return boxes
