@@ -127,6 +127,7 @@ class Selector(Opset):
         Opset.__init__(self, storename, phase, pos, name)
         self.selected = dict()
         self.viewed = set()
+        self.variables = set()
         self.computed = dict()
         self.idcodes = [] # Liste des indicateurs conservés.
         
@@ -149,15 +150,17 @@ class Selector(Opset):
         """ Affiche le nombre de sélections."""
         ops = len(self.viewed)
         pts = len(self.selected)
+        var = len(self.variables)
         return "{}\n" \
-               "{} instant(s) sélectionnés parmis {} courbes " \
-               "observées".format(Opset.__repr__(self), pts, ops)
+               "INSTANTS : {} instant(s) sélectionnés parmis {} courbes " \
+               "observées et {} variables.".format(Opset.__repr__(self), pts, ops, var)
 
     
     def clear_selection(self):
         """ Réinitialise la liste des sélections et observations."""
         self.viewed.clear()
         self.selected.clear()
+        self.variables.clear()
         self.computed.clear()
         
     
@@ -174,10 +177,10 @@ class Selector(Opset):
             idfilename = self.storename[:i] + '_I' + self.storename[i:]
         
         # Liste des variables
-        colnames = {self.selected[s][0] for s in self.selected}
+        colnames = self.variables
         # Liste des observations et instants selectionnés
-        obs = [s for s in self.selected]
-        ind = [self.selected[s][1] for s in self.selected]
+        obs = self.selected.keys()
+        ind = self.selected.values()
         
         # Mémorisation des données utiles dans une liste data.
         data = [] # Une liste de matrices de signaux.
@@ -258,7 +261,7 @@ class Selector(Opset):
         
         # Pour visualiser les données sur les signaux 
         # on conserve les instants sélectionnés.
-        dsi.computed = dict(enumerate(zip(['__all__']*len(ind), ind)))
+        dsi.computed = dict(enumerate(ind))
         dsi.rewind()
         dsi.idcodes = self.idcodes
         self._dsi = dsi
@@ -273,13 +276,18 @@ class Selector(Opset):
             :param min_sample_split: paramètre extrait de DecisionTreeClassifier
                             qui spécifie le nombre minimal d'observation par feuille.
         """
-        
-        if self._dsi is None:
+           
+        # On vérifie s'il faut recréer les indicateurs.
+        dsi = self._dsi
+        if dsi:
+            colnames = {c[0] for c in dsi.idcodes[3:]}
+            if colnames != self.variables or dsi.computed != self.selected:
+                dsi = None
+        if dsi is None:
             print("Building indicators ...")
             dsi = self.make_indicators()
-        else:
-            dsi = self._dsi
-        
+            
+
         # Fabrication des données d'apprentissage.
         def find_best_parameters(p,split,cols=None):
             X = []
@@ -287,7 +295,7 @@ class Selector(Opset):
             i0 = 0
             for df in dsi.iterator():
                 n = len(df)
-                var,ind = dsi.computed[dsi.sigpos]
+                ind = dsi.computed[dsi.sigpos]
                 pos = np.random.choice(np.arange(n),int(np.ceil(n*p)))
                 if cols:
                     x = df.iloc[pos,cols]
@@ -325,7 +333,8 @@ class Selector(Opset):
                                    self.learn_params['min_samples_split'],
                                    keepcols)
         self._clf = clf
-
+        self.computed = dict()
+        
         return clf
     
     
@@ -369,11 +378,33 @@ class Selector(Opset):
         p /= Z
         
         mx = np.argmax(p)
-        self.computed[self.sigpos] = (self.colname,mx)
+        self.computed[self.sigpos] = mx
         
         return p
-                     
     
+    
+    def predict(self, filename=None):
+        """ Renvoie la liste des instants prédits.
+        
+            :param filename: Si un nom de fichier est passé, alors la méthode
+                             `load(filename)` est d'abord appelée.
+                             
+            :return: Un dictionnaire
+        """
+        
+        if filename is None:
+            if len(self.computed) == len(self.records):
+                return self.computed
+            ds = self
+        else:
+            ds = self.load(filename)
+    
+        for df in ds.iterator():
+            p = ds.belief()
+            
+        return ds.computed
+    
+        
     def load(self,filename):
         """ Recharge un nouveau fichier à analyser."""
         ds = Selector(filename,self.phase)
@@ -419,7 +450,7 @@ class Selector(Opset):
             self.viewed.add(sigpos)
             f.layout.shapes = []
             if self.sigpos in self.selected:
-                i = self.selected[self.sigpos][1]
+                i = self.selected[self.sigpos]
                 x0 = self.df.index[i]
                 y0 = min(self.df[colname])
                 y1 = max(self.df[colname])
@@ -430,7 +461,7 @@ class Selector(Opset):
                                         'dash': 'dashdot'},
                                   row=1, col=1)
             if self.sigpos in self.computed:
-                i = self.computed[self.sigpos][1]
+                i = self.computed[self.sigpos]
                 x0 = self.df.index[i]
                 y0 = min(self.df[colname])
                 y1 = max(self.df[colname])
@@ -497,7 +528,8 @@ class Selector(Opset):
                     'line': {'color': 'rgb(171, 50, 96)',
                     'width': 2,
                     'dash': 'dashdot'}}]
-                self.selected[self.sigpos] = (self.colname, i1)
+                self.variables.add(self.colname)
+                self.selected[self.sigpos] = i1
             if self.selected:
                 if self._clf:
                     wbl.description = 'Relearn'
@@ -565,7 +597,12 @@ class Selector(Opset):
     def param(self):
         """ Interface de paramétrage."""
         
-        def update_parameters(retry, percentile, sample, split):
+        def update_parameters(width, sigma, max_order,
+                              retry, percentile, sample, split):
+            
+            self.feature_params['range_width'] = eval(width)
+            self.feature_params['range_sigma'] = eval(sigma)
+            self.feature_params['max_order'] = max_order
             
             self.learn_params['retry_number'] = retry 
             self.learn_params['retry_percentile'] = percentile
@@ -575,12 +612,12 @@ class Selector(Opset):
           
         # =================================================================
         # Widgets pour les indicateurs.
-        print("Features parameters")
+        print("Feature parameters (.feature_params):")
         wfrw = widgets.Textarea(description = "Range", 
-                               value = print(self.feature_params['range_width']),
+                               value = repr(self.feature_params['range_width']),
                                placeholder = '____________________')
         wfrs = widgets.Textarea(description = "Sigma", 
-                               value = print(self.feature_params['range_sigma']),
+                               value = repr(self.feature_params['range_sigma']),
                                placeholder = '____________________')
         wfmo = widgets.IntText(description = "Max Order", 
                                value = self.feature_params['max_order'])
@@ -588,10 +625,11 @@ class Selector(Opset):
         fbox = widgets.VBox([widgets.HBox([wfrw, wfrs]),
                              widgets.HBox([wfmo])])
         
+        display(fbox) ;
         
         # =================================================================
         # Widgets pour l'apprentissage.
-        print("Learning parameters")
+        print("\nLearning parameters (.learn_params):")
         wtrn = widgets.IntText(description = "Retry", 
                                value = self.learn_params['retry_number'])
         wtrp = widgets.IntText(description = "Percentile", 
@@ -605,7 +643,9 @@ class Selector(Opset):
                              widgets.HBox([wtsp, wtss])])
         
         out = widgets.interactive(update_parameters,
+                                  width=wfrw, sigma=wfrs, max_order=wfmo,
                                   retry=wtrn, percentile=wtrp,
                                   sample=wtsp, split=wtss)
         
-        return out
+        display(lbox)
+        
