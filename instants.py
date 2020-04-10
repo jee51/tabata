@@ -133,6 +133,17 @@ class Selector(Opset):
         self._dsi = None # Un pointeur vers un sélecteur contenant les indicateurs.
         self._clf = None # Le classifieur une fois créé par `fit()`
         
+        self.learn_params = dict(retry_number=10, 
+                                 retry_percentile=80,
+                                 samples_percent=0.01, 
+                                 min_samples_split=0.05)
+        
+        self.feature_params = dict(range_width = None,
+                                   range_sigma = range(5,26,10),
+                                   max_order=2)
+        
+        self.predict_params = dict(filter_width=100)
+        
         
     def __repr__(self):
         """ Affiche le nombre de sélections."""
@@ -151,11 +162,7 @@ class Selector(Opset):
         
     
     # ================== Apprentissage ====================================
-    def make_indicators(self, 
-                        idfilename=None,
-                        range_width = None,
-                        range_sigma = None,
-                        max_order=2):
+    def make_indicators(self, idfilename=None):
         """ Construction de l'Opset des indicateurs."""
 
         if not self.selected:
@@ -180,16 +187,17 @@ class Selector(Opset):
             data.append(df[colnames])
             
         # Demi largeur minimale du filtre.
-        if range_width is None:
+        if self.feature_params['range_width'] is None:
             L0 = max(10,int(np.floor(np.min(L)/100)))
-            range_width = range(L0,L0*10+1,L0)
+            self.feature_params['range_width'] = range(L0,L0*10+1,L0)
         
         # Ordre de dérivation.
+        max_order = self.feature_params['max_order']
         deg_poly = max(2,max_order)
         
         # Calcul des epsilons.
         epsilon = dict()
-        for l in range_width:
+        for l in self.feature_params['range_width']:
             w = 2*l+1 # La largeur doit être impaire pour SG.
             R = np.ndarray((max_order,len(colnames)))
             for d in range(max_order):
@@ -209,10 +217,6 @@ class Selector(Opset):
                         r = r + [np.std(b-c)]
                     R[d,i] = max(r)
             epsilon[w] = R
-        
-        # Nombre de sigma
-        if range_sigma is None:
-            range_sigma = range(5,26,10)
             
         # Calcul des indicateurs.
         idcodes = []
@@ -229,11 +233,11 @@ class Selector(Opset):
             for i,colname in enumerate(colnames):
                 a = df[colname].values
                 name,unit = nameunit(colname)
-                for l in range_width:
+                for l in self.feature_params['range_width']:
                     w = 2*l + 1
                     for d in range(max_order):
                         eps = epsilon[w][d,i]
-                        for s in range_sigma:
+                        for s in self.feature_params['range_sigma']:
                             for e in [1, -1]:
                                 c = indicator(a,w,d+1,e*s*eps,deg_poly)
                                 C = np.vstack((C,c))
@@ -261,11 +265,7 @@ class Selector(Opset):
         return dsi
     
     
-    def fit(self,
-            retry_number=1, 
-            retry_percentile=80,
-            samples_percent=0.01, 
-            min_samples_split=0.05):
+    def fit(self):
         """ Apprend un arbre de décision basé sur les indicateurs.
             
             :param percent: le pourcentage de points tirés par signal pour
@@ -309,25 +309,27 @@ class Selector(Opset):
     
     
         fi = np.zeros(len(dsi.df.columns))
-        for k in range(retry_number):
-            clf =  find_best_parameters(samples_percent,min_samples_split)
+        for k in range(self.learn_params['retry_number']):
+            clf =  find_best_parameters(self.learn_params['samples_percent'],
+                                        self.learn_params['min_samples_split'])
             fi += clf.feature_importances_
-        seuil = np.percentile(fi,retry_percentile)
+        seuil = np.percentile(fi,self.learn_params['retry_percentile'])
         newcodes = {i:c for i,c in enumerate(dsi.idcodes) if fi[i]>seuil}
         self.idcodes = list(newcodes.values())
         
         # Apprentissage final.
         print("Keeping {} indicators over {}".format(len(self.idcodes),len(dsi.idcodes)))
         keepcols = list(newcodes.keys())
-        clf = find_best_parameters(min(0.5,samples_percent*retry_number),
-                                   min_samples_split,
+        p1 = self.learn_params['samples_percent']*self.learn_params['retry_number'] ;
+        clf = find_best_parameters(min(0.5,p1),
+                                   self.learn_params['min_samples_split'],
                                    keepcols)
         self._clf = clf
 
         return clf
     
     
-    def belief(self,filter_width=100):
+    def belief(self):
         """ Calcul d'un indicateur de présomption de détection."""
         
         df = self.df
@@ -349,11 +351,12 @@ class Selector(Opset):
             else:
                 a = df[colname].values
                 w = 2*l + 1
-                deg_poly = max(2,d)
+                deg_poly = max(self.feature_params['max_order'],d)
                 c = indicator(a,w,d+1,es*eps,deg_poly)
             C = np.vstack((C,c))
             
         ip = clf.predict(C.T) # Eventuellement pondérer.
+        filter_width = self.predict_params['filter_width']
         p = signal.savgol_filter(ip,
                                  window_length=2*filter_width+1,
                                  polyorder=2,
@@ -410,7 +413,8 @@ class Selector(Opset):
             old_update(colname,sigpos)
         
             # Mise à jour des probas.
-            f.update_traces(x=self.df.index, y=self.belief(width), row=2)
+            self.predict_params['filter_width'] = width
+            f.update_traces(x=self.df.index, y=self.belief(), row=2)
             
             self.viewed.add(sigpos)
             f.layout.shapes = []
@@ -433,21 +437,11 @@ class Selector(Opset):
                 f.add_shape(type='line',
                                   x0=x0, y0=y0, x1=x0, y1=y1,
                                   line= {'color': 'rgb(96, 50, 171)',
-                                        'width': 1,
+                                        'width': 2,
                                         'dash': 'dot'},
                                   row=1, col=1)
         # ---- End: Callback Interactive ----
         
-        # =================================================================
-        # Widgets pour l'apprentissage.
-        wtrn = widgets.IntText(description = "Retry", value = 10,
-                               layout=widgets.Layout(width='140px'))
-        wtrp = widgets.IntText(description = "Percentile", value = 80,
-                              layout=widgets.Layout(width='140px'))
-        wtsp = widgets.FloatText(description = "Sample", value = 0.01,
-                                layout=widgets.Layout(width='140px'))
-        wtss = widgets.FloatText(description = "Split", value = 0.05,
-                                layout=widgets.Layout(width='140px'))
                 
         # =================================================================
         # Boutton pour l'apprentissage.
@@ -472,7 +466,7 @@ class Selector(Opset):
                 b.description = 'No Target'
                 b.button_style = 'danger'
             else:
-                self.fit(wtrn.value, wtrp.value, wtsp.value, wtss.value)
+                self.fit()
                 update_plot(self.colname,self.sigpos,wf.value)
                 b.description = 'Relearn'
                 b.button_style = 'success'
@@ -526,7 +520,8 @@ class Selector(Opset):
         
         # =================================================================
         # Slider pour la largeur du filtre de croyance.
-        wf = widgets.IntSlider(value=10, min=10, max=500, step=10,
+        wf = widgets.IntSlider(value=self.predict_params['filter_width'], 
+                               min=10, max=500, step=10,
                                orientation='horizontal',
                                description='Filter',
                                continuous_update=False,
@@ -540,7 +535,6 @@ class Selector(Opset):
         e['update_function'] = update_plot 
         e['filter_slider'] = wf
         e['learn_button'] = wbl
-        e['learn_param'] = [wtrn, wtrp, wtsp, wtss]
         return e
     
     
@@ -562,8 +556,56 @@ class Selector(Opset):
             [widgets.HBox([e['variable_dropdown'], 
                           e['previous_button'], e['next_button']]),
              widgets.HBox([f, e['signal_slider']]),
-             widgets.HBox([e['filter_slider'], e['learn_button']]),
-             widgets.HBox(e['learn_param'])
+             widgets.HBox([e['filter_slider'], e['learn_button']])
             ])
         
         return boxes
+    
+    
+    def param(self):
+        """ Interface de paramétrage."""
+        
+        def update_parameters(retry, percentile, sample, split):
+            
+            self.learn_params['retry_number'] = retry 
+            self.learn_params['retry_percentile'] = percentile
+            self.learn_params['samples_percent'] = sample 
+            self.learn_params['min_samples_split'] = split
+            
+          
+        # =================================================================
+        # Widgets pour les indicateurs.
+        print("Features parameters")
+        wfrw = widgets.Textarea(description = "Range", 
+                               value = print(self.feature_params['range_width']),
+                               placeholder = '____________________')
+        wfrs = widgets.Textarea(description = "Sigma", 
+                               value = print(self.feature_params['range_sigma']),
+                               placeholder = '____________________')
+        wfmo = widgets.IntText(description = "Max Order", 
+                               value = self.feature_params['max_order'])
+
+        fbox = widgets.VBox([widgets.HBox([wfrw, wfrs]),
+                             widgets.HBox([wfmo])])
+        
+        
+        # =================================================================
+        # Widgets pour l'apprentissage.
+        print("Learning parameters")
+        wtrn = widgets.IntText(description = "Retry", 
+                               value = self.learn_params['retry_number'])
+        wtrp = widgets.IntText(description = "Percentile", 
+                               value = self.learn_params['retry_percentile'])
+        wtsp = widgets.FloatText(description = "Sample", 
+                                 value = self.learn_params['samples_percent'])
+        wtss = widgets.FloatText(description = "Split", 
+                                 value = self.learn_params['min_samples_split'])
+        
+        lbox = widgets.VBox([widgets.HBox([wtrn, wtrp]),
+                             widgets.HBox([wtsp, wtss])])
+        
+        out = widgets.interactive(update_parameters,
+                                  retry=wtrn, percentile=wtrp,
+                                  sample=wtsp, split=wtss)
+        
+        return out
