@@ -7,10 +7,9 @@ est stocké dans la liste mais aussi comme nom de l'index temporel ce qui facili
 la recherche.
 
 * Les noms de variables sont composées d'un nom suivi de l'unité entre crochets "[]".
-* La fonction auxiliaire nameunit décompose le nom d'une variable.
-* L'itérateur Iterator renvoie un itérateur sur les observations du fichier HDF5.
-* Le Selector est une classe permettant de visualiser interactivement le contenu.
-* Le Selector permet aussi de sélectionner des points sur des courbes.
+* La fonction auxiliaire `nameunit()` décompose le nom d'une variable.
+* L'itérateur `iterator()` renvoie un itérateur sur les observations du fichier HDF5.
+* L'`Opset` est une classe permettant de visualiser interactivement le contenu.
 
 **Versions**
 
@@ -22,8 +21,8 @@ Created on Wed May  9 16:50:34 2018
 @author: Jérôme Lacaille
 """
 
-__date__ = "2020-03-30"
-__version__ = '1.0.3'
+__date__ = "2020-04-11"
+__version__ = '1.0.4'
 
 import os
 import numpy as np
@@ -99,7 +98,8 @@ def selplot(df, variable=None):
     """ Affiche un signal parmis la liste des signaux disponibles.
 
         :param df:       la table de données.
-        :param variable: une variable à afficher au lieu de la première colonne de la table.
+        :param variable: une variable à afficher au lieu de la première
+                            colonne de la table.
     """
 
     def selected_plot(col):
@@ -184,7 +184,8 @@ def byunitplot(df, yunit=None, xunit="date", title=""):
 #%% Un affichage interactif permettant de visualiser le contenu de la liste.
 class Opset:
     """ Un affichage interactif utilisant plotly qui permet de
-        sélectionner des points dans une liste d'observations.
+        visualiser les signaux stockés sous la formle de DataFrames pandas
+        dans un fichier HDF5.
         
         Il s'agit de la classe principale de ce module. Elle permet de 
         charger un fichier HDF5 contenant une série de signaux et des les
@@ -193,6 +194,14 @@ class Opset:
         Cette classe est construite pour être facilement dérivable de sorte
         que l'on puisse créer de nouvelles interfaces similaires pour différents
         algorithmes interactifs.
+
+        :var storename:le nom du fichier HDF5.
+        :var sigpos:   la position du pointeur (à partir de 0) dans le fichier.
+        :var records:  la liste des noms d'enregistrements.
+        :var colname:  la variable à afficher par défaut.
+        :var phase:    un nom de variable booléen (None par défaut) représentant
+                        instants à mettre en évidence.
+        :var df:       la DataFrame courant (celui qui correspond à `sigpos`.)
     """
 
     def __init__(self, storename, phase=None, pos=0, name=None):
@@ -200,14 +209,15 @@ class Opset:
         
             Le constructeur de l'Opset nécessite un fichier HDF5, si le fichier
             transmis n'existe pas il sera créé pour éventuellement un remplissage par
-            la méthode `put`.
+            la méthode `put()`.
 
             :param storename: le datatore correspondant à l'OPSET.
             :param phase:     le nom d'une colonne binaire contenant les indices
                                 d'une pase particulière à surligner en rouge.
-            :param pos:       un numéro de signal à charger par défaut.
+            :param pos:       un numéro de signal à charger par défaut, 
+                                renseigne la variable sigpos.
             :param name:      le début d'un nom de variable (colonne du signal)
-                                par défaut.
+                                par défaut (variable colname).
         """
         
         if not os.path.isfile(storename): # Il faut créer le fichier.
@@ -232,16 +242,17 @@ class Opset:
         self.sigpos = pos
         self.colname = colname
         self.phase = phase
-
         
         
     def __repr__(self):
         """ Affichage du nom de l'Opset et de la liste des instants selectionnés."""
 
         return "OPSET '{}' de {} signaux.\n\
-                position courante : {}\n\
-                variable : {}".format(self.storename, len(self.records),
-                                      self.sigpos, self.colname)
+        position courante : sigpos  = {}\n\
+        variable courante : colname = {}\n\
+        phase surlignée   : phase   = {}"\
+            .format(self.storename, len(self.records),
+                    self.sigpos, self.colname, self.phase)
 
     
     def iterator(self, *argv):
@@ -258,7 +269,7 @@ class Opset:
             :param first: le premier élément  itérer (commence à 0) ou un itérable.
             :param last:  le dernier élément (la fin du fichier si non précisé)
         
-            :return:      le DataFrame
+            :return:      le DataFrame à chaque itération.
         """
         
         if len(argv)==0:
@@ -276,8 +287,15 @@ class Opset:
     
     
     def rewind(self,sigpos=0):
+        """ Réinitialisation du pointeur au début du fichier.
+        
+            Cette méthode renvoie l'Opset ce qui fait qu'on peut 
+            enchainer les appels.
+        """
         for df in self.iterator(sigpos,sigpos+1):
             pass
+        
+        return self
     
     
     def current_record(self):
@@ -289,11 +307,17 @@ class Opset:
  
 
     def clean(self):
-        """ Réinitialise le fichier."""
+        """ Réinitialise le fichier.
+        
+            Cette méthode renvoie l'Opset ce qui fait qu'on peut 
+            enchainer les appels.
+        """
         
         if os.path.exists(self.storename):
             os.remove(self.storename)
         self.__init__(self.storename)
+                      
+        return self
         
         
     def put(self,df,record=None):
@@ -301,8 +325,7 @@ class Opset:
         
             :param df:     le signal à stocker.
             :param record: l'enregistrement du signal 
-            :param reset:  recrée un fichier vide.
-
+ 
             Si aucun nom d'enregistrement n'est donné on regarde df.index.name.
             Si le nom de l'enregistrement n'existe pas il est rajouté.
             
@@ -323,15 +346,21 @@ class Opset:
         if (not df.index.name) or len(df.index.name)==0:
             df.index.name = record
         
+        # Enregistrement du DataFrame.
         self.df = df
         df.to_hdf(self.storename,record)
+        
+        # Si l'Opset était vide maintenant il faut spécifier une variable.
+        self.colname = df.columns[0]
 
 
+    # ------------------------ Affichage ----------------------------------
     def make_figure(self,f,phase=None,pos=None,name=None):
         """ Crée l'affichage interactif des courbes.
         
             Cette fonction définit les différents éléments de l'affichage. 
 
+            :param f:       un pointeur sur la figure à créer.
             :param phase:   le nom d'une colonne binaire contenant les
                             points à mettre en évidence si besoin.
             :param pos:     le numéro du signal à afficher en premier sinon
@@ -339,14 +368,14 @@ class Opset:
             :param name:    le nom de la variable à afficher en premier
                             sinon la premiere variable du premier signal.
 
-            On la décompose de la fonction `plot` pour avoir plus de
+            On la décompose de la fonction d'affichage pour avoir plus de
             flexibilité si on souhaite dériver la classe et proposer
-            d'autres interfaces graphiques.
+            d'autres interfaces graphiques. Une méthode principale `plot()` doit
+            d'abord créer la figure avec `make_subplot()` même si ici on utilise
+            qu'un unique graphe. Cette figure est ensuite passée en agument `f`.
 
-            Cette version crée 6 objets :
+            Cette version crée 5 objets à l'écran :
 
-            * `figure`:             la figure contenat les axes où l'on 
-                                    affiche la courbe.
             * `variable_dropdown`:  une liste de variables.
             * `signal_slider`:      la scrollbar correspondant aux
                                     différents signaux.
@@ -355,9 +384,9 @@ class Opset:
             * `update_function`:    la fonction de mise à jour de 
                                     l'affichage.
 
-            La mise à jour d el'affichage se fait par le callback 
-            `update_function`. Dans sa version de base elle est exécutée
-            par l'appel à la fonction `interactive`:
+            La mise à jour de l'affichage se fait par le callback 
+            `update_function()`. Dans la méthode `plot()` elle est exécutée
+            par l'appel à la fonction `interactive()`:
 
               out =  widgets.interactive(update_function,
                                         colname=variable_dropdown,
@@ -368,10 +397,10 @@ class Opset:
             qu'ils restent actifs.
 
             :return: le dictionnaire d'éléments utiles à l'affichage décrit
-            ci-dessus.
+                        ci-dessus.
         """
 
-        # Mise à jour du signal.
+        # Une erreur s'il n'y a rien dans le fichier.
         nbmax = len(self.records)
         if nbmax==0:
             raise OpsetError(self.storename, "Opset is empty.")
@@ -382,8 +411,10 @@ class Opset:
         # serait ajoutée.
         self.df = pd.read_hdf(self.storename,self.records[self.sigpos])
 
-        self.colname = get_colname(self.df.columns,name)
-        self.phase = get_colname(self.df.columns,phase,default=None)
+        if (name is not None):
+            self.colname = get_colname(self.df.columns,name)
+        if (phase is not None):
+            self.phase = get_colname(self.df.columns,phase,default=None)
         
         # Définition des données à afficher.
         f.add_trace(go.Scatter(x=self.df.index, y=self.df[self.colname],name="value"),
@@ -400,10 +431,13 @@ class Opset:
         f.update_layout(width=500, height=400, showlegend=False)
       
         
-        # ---- Callback ----
+        # ---- Callback de mise à jour de la figure ----
         def update_plot(colname, sigpos):
             """ La fonction d'interactivité avec les gadgets.
+            
                 Ce callback utilise la continuation de la figure `f`. 
+                On fait cela pour qu'à chaque appel une nouvelle figure
+                soit effectivement créée et empilée dans le notebook.
             """
             
             self.colname = colname
@@ -417,6 +451,7 @@ class Opset:
             # Mise à jour des courbes.
             f.update_traces(selector=dict(name="value"),
                             x = self.df.index, y = self.df[self.colname])
+            # Affichage superposé de la phase identifiée.
             if self.phase is not None:
                 ind = self.df[self.phase]
                 f.update_traces(selector=dict(name="phase"),
@@ -424,8 +459,9 @@ class Opset:
                                 y = self.df[self.colname][ind])
 
             # Mise à jour des titres et labels.
-            f.update_layout(title=self.df.index.name, yaxis_title=name + '  [ ' + unit + ' ]')
-        # ---- Calback ----
+            f.update_layout(title=self.df.index.name, 
+                            yaxis_title=name + '  [ ' + unit + ' ]')
+        # ---- Fin du calback ----
          
             
         # Construction des gadgets interactifs.
@@ -441,7 +477,7 @@ class Opset:
                                layout=widgets.Layout(height='360px'))
 
 
-        # ---- Callback ----
+        # ---- Callback des boutons ----
         def wb_on_click(b):
             """ Callbacks des boutons Previous et Next."""
             if b.description == 'Previous':
@@ -450,15 +486,16 @@ class Opset:
             if b.description == 'Next':
                 if ws.value < ws.max:
                     ws.value += 1
-        # ---- Callback ----
+        # ---- Fin du callback ----
 
         wbp.on_click(wb_on_click)
         wbn.on_click(wb_on_click)
         
-        # Pour la création de l'interface on peut encapsuler des boîtes.
-        # boxes = widgets.VBox([widgets.HBox([wd, wbp, wbn]),
-        #                       widgets.HBox([f, ws])])
+
+        # Mise à jour de l'affichage.
         update_plot(self.colname, self.sigpos)
+        
+        # On renvoie le dictionnaire des objets graphiques.
         return dict(variable_dropdown = wd,
                     signal_slider = ws,
                     previous_button = wbp,
@@ -469,16 +506,21 @@ class Opset:
     def plot(self,phase=None,pos=None,name=None):
         """ Affichage de l'interface.
         
-            La fonction plot commence par créer les différents éléments par
-            un passage de ses paramètres à `make_figure`, puis elle doit
+            La méthode `plot()` commence par créer les différents éléments par
+            un passage de ses paramètres à `make_figure()`, puis elle doit
             mettre en oeuvre l'interactivité par un appel à `interactive`
             et construire le look de l'interface en positionnant les 
             objets. Il est aussi possible de modifier le `layout`de la 
             figure.
 
-            En entrée, les mêmes paramètres que `make_figure`,
+            En entrée, les mêmes paramètres que `make_figure()`,
             et en sortie une organisation des éléments dans une boite.
+            
+            Il est important de créer la figure avec `make_subplots()` car
+            on pourra ainsi utiliser les position des graphes dans le cas d'une
+            dérivation de la classe.
         """
+
         f = make_subplots(rows=1, cols=1)
         f = go.FigureWidget(f)
         e = self.make_figure(f, phase,pos,name)
