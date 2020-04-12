@@ -278,9 +278,14 @@ class Selector(Opset):
             C = np.vstack((a,np.flip(a), a/(len(df)-1)))
             if first:
                 idnames = ['LEN[pts]','REV[pts]','PERCENT[%]']
-                idcodes = [('LEN',0,0,0,0.0), ('REV',0,0,0,0.0), ('PERCENT',0,0,0,0.0)]
+                idcodes = [('LEN',0,0,0,0.0), ('REV',0,0,0,0.0),
+                           ('PERCENT',0,0,0,0.0)]
             for i,colname in enumerate(colnames):
                 a = df[colname].values
+                C = np.vstack((C,a))
+                if first:
+                    idnames = idnames + [colname]
+                    idcodes = idcodes + [(colname,0,0,0,0,0)]
                 name,unit = nameunit(colname)
                 for l in self.feature_params['range_width']:
                     w = 2*l + 1
@@ -371,14 +376,11 @@ class Selector(Opset):
                                         self.learn_params['min_samples_split'])
             fi += clf.feature_importances_
         seuil = np.percentile(fi,self.learn_params['retry_percentile'])
-        #newcodes = {i:c for i,c in enumerate(dsi.idcodes) if fi[i]>seuil}
-        #self.idcodes = list(newcodes.values())
         keepcols = np.argwhere(fi>seuil).ravel().tolist()
         
         # Apprentissage final.
         print("First keeping {} indicators over {}"\
               .format(len(keepcols),len(dsi.idcodes)))
-        #keepcols = list(newcodes.keys())
         p1 = self.learn_params['samples_percent']*self.learn_params['retry_number'] ;
         clf = find_best_parameters(min(0.5,p1),
                                    self.learn_params['min_samples_split'],
@@ -402,7 +404,18 @@ class Selector(Opset):
         return clf
     
     
-    def belief(self, df=None):
+    def describe(self):
+        """ Affiche l'arbre de décision final."""
+        codes = pd.DataFrame(data=self.idcodes, 
+                             columns=['Name', 'Filter', 'Order', 'Sigma', 'Std'])
+        codes.index.name = "Feature"
+        print(codes)
+        r = tree.export_text(self._clf)
+        print(r)
+        
+        
+    
+    def belief(self, arg=None):
         """ Calcul d'un indicateur de présomption de détection.
         
             Cette fonction recherche un point pour lequel les estimations
@@ -413,11 +426,15 @@ class Selector(Opset):
             du lissage pour le calcul de la dérivée.
         """
         
-        if df is None:
+        if arg is None:
             df = self.df
             extern = False
-        else:
+        elif isinstance(arg,pd.DataFrame):
+            df = arg
             extern = True
+        elif isinstance(arg,int):
+            df = self.rewind(arg).df
+            extern = False
             
         if self._clf is None:
             return np.zeros(df.index.shape)
@@ -434,6 +451,8 @@ class Selector(Opset):
                     c = np.flip(a)
                 elif colname == "PERCENT":
                     c = a/(len(df)-1)
+                else:
+                    c = df[colname].values
             else:
                 a = df[colname].values
                 w = 2*l + 1
@@ -489,7 +508,29 @@ class Selector(Opset):
                 r[i] = mx
             return r
     
+    
+    def all_scores(self):
+        """ Renvoie les écarts entre détection et label."""
         
+        scores = dict()
+        for i in self.selected:
+            t0 = self.selected[i]
+            if not i in self.computed:
+                self.belief(i)
+            t1 = self.computed[i]
+            scores[i] = t1-t0
+
+        return scores
+                
+        
+    def score(self):
+        """ Renvoie l'écart maximal absolu de détection."""
+        
+        scores = self.all_scores()
+        
+        return np.max(np.abs(list(scores.values())))
+    
+    
     def load(self,filename):
         """ Recharge un nouveau fichier à analyser."""
         ds = Selector(filename,self.phase)
