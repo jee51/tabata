@@ -254,6 +254,26 @@ class Opset:
             .format(self.storename, len(self.records),
                     self.sigpos, self.colname, self.phase)
 
+    def __len__(self):
+        """ La longueur de l'Opset."""
+        return len(self.records)
+    
+    def __getitem__(self,pos):
+        """ Récupère le DataFrame à la position souhaitée.
+            
+            Déplace le pointeur en conséquence.
+        """
+        
+        if pos<0 or pos>= len(self.records):
+            raise OpsetError(self.storename,
+                            "La position doit être comprise entre 0 \
+                            et {}".format(len(self.records)-1))
+    
+        self.sigpos = pos
+        rec = self.records[pos]
+        self.df = pd.read_hdf(self.storename, rec)
+        return self.df
+        
     
     def iterator(self, *argv):
         """ Itération sur les éléments du HDF5.

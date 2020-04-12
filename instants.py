@@ -402,7 +402,7 @@ class Selector(Opset):
         return clf
     
     
-    def belief(self):
+    def belief(self, df=None):
         """ Calcul d'un indicateur de présomption de détection.
         
             Cette fonction recherche un point pour lequel les estimations
@@ -413,7 +413,12 @@ class Selector(Opset):
             du lissage pour le calcul de la dérivée.
         """
         
-        df = self.df
+        if df is None:
+            df = self.df
+            extern = False
+        else:
+            extern = True
+            
         if self._clf is None:
             return np.zeros(df.index.shape)
         clf = self._clf
@@ -449,13 +454,14 @@ class Selector(Opset):
             Z=1.0
         p /= Z
         
-        mx = np.argmax(p)
-        self.computed[self.sigpos] = mx
+        if not extern:
+            mx = np.argmax(p)
+            self.computed[self.sigpos] = mx
         
         return p
     
     
-    def predict(self, filename=None):
+    def predict(self, arg=None):
         """ Renvoie la liste des instants prédits.
         
             :param filename: Si un nom de fichier est passé, alors la méthode
@@ -464,17 +470,24 @@ class Selector(Opset):
             :return: Un dictionnaire avec les instants calculés.
         """
         
-        if filename is None:
+        if arg is None:
             if len(self.computed) == len(self.records):
                 return self.computed
-            ds = self
+            for df in self.iterator():
+                p = self.belief()
+            return self.computed
+        
         else:
-            ds = self.load(filename)
-    
-        for df in ds.iterator():
-            p = ds.belief()
-            
-        return ds.computed
+            if isinstance(arg,Opset):
+                ds = arg
+            else:
+                ds = Opset(arg)
+            r = dict()
+            for i,df in enumerate(ds.iterator()):
+                p = self.belief(df)
+                mx = np.argmax(p)
+                r[i] = mx
+            return r
     
         
     def load(self,filename):
@@ -654,7 +667,7 @@ class Selector(Opset):
         return e
     
     
-    def plot(self,phase=None,sigpos=None,colname=None):
+    def plot(self,phase=None,pos=None,name=None):
         """ On ajoute à l'affichage de l'Opset une sélection d'instants."""
         f = make_subplots(rows=2, cols=1,
                           shared_xaxes=True,
@@ -662,7 +675,7 @@ class Selector(Opset):
                           specs=[[{"type": "scatter"}],
                                 [{"type": "scatter"}]])
         f = go.FigureWidget(f)
-        e = self.make_figure(f,phase,sigpos,colname)
+        e = self.make_figure(f,phase,pos,name)
         out = widgets.interactive(e['update_function'], 
                                   colname=e['variable_dropdown'], 
                                   sigpos=e['signal_slider'],
