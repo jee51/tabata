@@ -4,25 +4,19 @@ INSTANTS - Extracteur d'instants.
 
 Des fonctions de gestion de l'extracteur d'instants.
 
-todo:: 
-
-- [ ] Modifier `make_indicators` pour ne pas refaire les calculs après ajout
-        de nouveaux éléments.
-- [ ] Vérifier que le `load` dispose des variables utiles dans le `_clf`.
-- [ ] Faire un calcul de synthèse avec régression logistique finale.
 
 **Versions**
 
 1.0.3 - Algorithmes.
-
+1.0.4 - Mise à jour de la doc.
 
 Created on Fri March 27 19:27:00 2020
 
 @author: Jérôme Lacaille
 """
 
-__date__ = "2020-03-29"
-__version__ = '1.0.2'
+__date__ = "2020-04-11"
+__version__ = '1.0.4'
 
 import os
 import numpy as np
@@ -38,10 +32,10 @@ from tabata.opset import Opset, nameunit, OpsetError
 ###########################################################################
 #%% Fonctions auxiliaires.
 def indicator(y,width,order,sigma,deg=2):
-    """ Création d'un indicateur de comptage de bosses.
+    """ Création d'un indicateur de comptage de bosses et de creux.
     
         Le but est de remplacer un signal par un indicateur qui donne pour 
-        chaque instant la position entre deux bosses ou creux successifs.
+        chaque instant la position entre bosses ou creux successifs.
 
         Elle commence par lisser le signal avec le filtre polynomial de 
         Savitsky-Golay pour un polynome d'ordre 2 (ou deg).
@@ -57,20 +51,18 @@ def indicator(y,width,order,sigma,deg=2):
 
           z,k = indicator(y,width,order,sigma,deg)
 
-        :param y: le signal d'entrée.
+        :param y:     le signal d'entrée.
         :param width: la largeur de bande du filtre.
         :param order: l'ordre de dérivation (1 ou 2).
         :param sigma: un seuil de détection de passage par zéro.
+        :param deg:   le dergé maximal du polynôme de lissage.
 
         Si le seuil de détection est négatif on étudie les sorties de zéros
         en dessous du seuil.
 
         :return z: l'indicateur calculé.
-        
-        todo:: faire un calcul global de epsilon par variable et niveau de
-        lissage.
     """
-    x = signal.savgol_filter(y,window_length=width,polyorder=2,deriv=order)
+    x = signal.savgol_filter(y,window_length=width,polyorder=deg,deriv=order)
     
     if sigma>0:
         b = x>sigma
@@ -100,13 +92,23 @@ class Selector(Opset):
         
         Le selecteur va créer deux objets :
         
-        * `sel_instants`: un dictionnaire indéxé par un numéro d'opération
-                          qui contient:
+        * `selected`:   un dictionnaire indéxé par un numéro d'opération
+                        qui contient:
                           - le nom de la variable vue, 
                           - la position réelle sélectionnée, 
                           - la position dans le signal.
-        * `op_viewed`:    la liste des signaux vraiment observés depuis la 
-                          création du Selector.
+        * `viewed`:     la liste des signaux vraiment observés depuis la 
+                        création du Selector.
+        * `variables`:  la liste des variables observées par l'expert.
+        * `computed`:   un dictionnaire contenant les instants calculés 
+                        une fois le détecteur d'instants calibré.
+        * `idcodes`:    la description des indicateurs utilisés.
+        
+        Deux conteneurs "cachés" :
+        
+        * `_dsi`:       un Selector contenant les indicateurs pour 
+                        l'apprentissage.
+        * `_clf`:       le classifieur finalement appris (un arbre de décision.)
                           
         Maintenir la liste des signaux vraiment observés est une information
         qui permet d'utiliser des données vues par l'utilisateur, mais qu'il
@@ -115,11 +117,34 @@ class Selector(Opset):
         
         La position réelle sélectionnée est la position sur la courbe
         sélectionnée. Elle peut être différente de la position dans le
-        signal si par exemple une pahse est mise en évidence. Dans ce cas,
+        signal si par exemple une phase est mise en évidence. Dans ce cas,
         en cliquant sur la phase, on obtiendra la position au sein de cette
-        phase qui est nécessairement plus petite.
+        phase qui est nécessairement plus petite
         
-        todo:: Recréer un classifieur avec juste les indicateurs nécessaires.
+        Le sélecteur dispose de trois jeux de paramètres qu'il est possible
+        de modifier directement ou par l'appel des méthodes `param()` 
+        et `plot()`.
+
+        learn_params:
+            retry_number     (10)   le nombre de modèles testés.
+            retry_percentile (80)   un quantile minimum sur le taux d'apparition
+                                    d'une variable dans les modèles testés
+                                    pour la conserver.
+            sample_percent   (0.01) le taux de sélection de points dans les 
+                                    signaux pour l'apprentissage.
+            min_sample_split (0.05) le taux minimal dans une règle pour autoriser
+                                    un découpage.
+                                    
+        feature_params:
+            range_width             les tailles de demi-fenêtres de lissage.
+            range_sigma             les seuils pour la détecton du passage
+                                    par zéro.
+            max_order        (2)    le degré du polynome pour le lissage
+                                    se Savitsky-Golay.
+                                    
+        predict_params:
+            filter_width     (100)  la demi-taille du filtre de lissage des 
+                                    prédictions.
     """
 
     def __init__(self, storename, phase=None, pos=0, name=""):
@@ -157,7 +182,14 @@ class Selector(Opset):
 
     
     def clear_selection(self):
-        """ Réinitialise la liste des sélections et observations."""
+        """ Réinitialise la liste des sélections et observations.
+        
+            Il est utile d'appeler cette méthode avant un réapprentissage
+            si vous ne voulez pas garder toute la sélection précédente.
+            Par exemple, il est possible de modifier les instants sélectionnés
+            graphiquement, mais pas de supprimer des variables ou des signaux
+            vus précédemment.
+        """
         self.viewed.clear()
         self.selected.clear()
         self.variables.clear()
@@ -166,7 +198,21 @@ class Selector(Opset):
     
     # ================== Apprentissage ====================================
     def make_indicators(self, idfilename=None):
-        """ Construction de l'Opset des indicateurs."""
+        """ Construction de l'Opset des indicateurs.
+        
+            Pour toutes les opérations pour lesquelles l'expert à identifié
+            un instant d'intérêt, et toutes les variables observées, on va
+            créer un jeu d'indicateurs en fonction des paramètres de `features`.
+            
+            Cet Opset est en fait un Selector pour lequel le dictionnaire
+            `computed` est renseigné, ce qui permet de visualiser sur les 
+            indicateurs les points à identifier.
+            
+            Cette méthode est appelée automatiquement par `fit()`, mais on
+            peut l'utiliser directement pour observer les indicateurs produit.
+            Cela permet de mieux calibrer les paramètres correspondant à la
+            descriptions des indicateurs (`feature_params`).
+        """
 
         if not self.selected:
             raise OpsetError(self.storename,"Nothing to learn !")
@@ -270,11 +316,14 @@ class Selector(Opset):
     
     def fit(self):
         """ Apprend un arbre de décision basé sur les indicateurs.
+
+            Cette fonction crée les indicateurs par l'appel de 
+            `make_indicators()` si `_dsi` est vide ou si les variables
+            observées ne sont plus les mêmes.
             
-            :param percent: le pourcentage de points tirés par signal pour
-                            l'apprentissage.
-            :param min_sample_split: paramètre extrait de DecisionTreeClassifier
-                            qui spécifie le nombre minimal d'observation par feuille.
+            Plusieurs arbres de décision sont d'abord testés pour extraire
+            une liste réduite d'indicateurs pertinets. Ensuite on recrée un
+            arbre définitif à partir de cette sous-sélection.
         """
            
         # On vérifie s'il faut recréer les indicateurs.
@@ -322,16 +371,31 @@ class Selector(Opset):
                                         self.learn_params['min_samples_split'])
             fi += clf.feature_importances_
         seuil = np.percentile(fi,self.learn_params['retry_percentile'])
-        newcodes = {i:c for i,c in enumerate(dsi.idcodes) if fi[i]>seuil}
-        self.idcodes = list(newcodes.values())
+        #newcodes = {i:c for i,c in enumerate(dsi.idcodes) if fi[i]>seuil}
+        #self.idcodes = list(newcodes.values())
+        keepcols = np.argwhere(fi>seuil).ravel().tolist()
         
         # Apprentissage final.
-        print("Keeping {} indicators over {}".format(len(self.idcodes),len(dsi.idcodes)))
-        keepcols = list(newcodes.keys())
+        print("First keeping {} indicators over {}"\
+              .format(len(keepcols),len(dsi.idcodes)))
+        #keepcols = list(newcodes.keys())
         p1 = self.learn_params['samples_percent']*self.learn_params['retry_number'] ;
         clf = find_best_parameters(min(0.5,p1),
                                    self.learn_params['min_samples_split'],
                                    keepcols)
+        fi = clf.feature_importances_
+        
+        while np.sum(fi==0)>0:
+            newcols = np.array(keepcols)[fi>0]
+            keepcols = newcols.tolist()
+            clf = find_best_parameters(min(0.5,p1),
+                                   self.learn_params['min_samples_split'],
+                                   keepcols)
+            fi = clf.feature_importances_
+                       
+        print("Then  keeping {} indicators over {}"\
+              .format(len(keepcols),len(dsi.idcodes)))
+        self.idcodes = [dsi.idcodes[i] for i in keepcols]
         self._clf = clf
         self.computed = dict()
         
@@ -339,7 +403,15 @@ class Selector(Opset):
     
     
     def belief(self):
-        """ Calcul d'un indicateur de présomption de détection."""
+        """ Calcul d'un indicateur de présomption de détection.
+        
+            Cette fonction recherche un point pour lequel les estimations
+            sont négatives à gauche et positives à droite.
+            On utilise la valeur max d'une dérivée.
+            
+            Le paramètre `predict_params.filter_width` donne la demi-largeur
+            du lissage pour le calcul de la dérivée.
+        """
         
         df = self.df
         if self._clf is None:
@@ -389,7 +461,7 @@ class Selector(Opset):
             :param filename: Si un nom de fichier est passé, alors la méthode
                              `load(filename)` est d'abord appelée.
                              
-            :return: Un dictionnaire
+            :return: Un dictionnaire avec les instants calculés.
         """
         
         if filename is None:
@@ -415,7 +487,19 @@ class Selector(Opset):
         
     # ====================== Affichages ===========================                              
     def make_figure(self,f,phase=None,pos=None,name=None):
-        """ Création de l'interface graphique."""
+        """ Création de l'interface graphique.
+        
+            On rajoute à l'interface graphique de l'Opset une fonction de
+            sélection d'instant sur la courbe affichée (il faut gérer le
+            cas de la surimpression d'une phase) et une ligne contenant :
+                - un slider pour la taille du filtre de prédiction ;
+                - un bouton pour lancer ou relancer l'apprentissage.
+                
+            Le boutant d'apprentissage est rouge tant qu'il n'y a aucune
+            donnée labellisée, il passe au bleu quand on peut lancer un
+            premier apprentissage (méthode `fit()`), puis au vert quand
+            l'apprentissage s'est bien passé et que l'on peut recommencer.
+        """
 
         # Récupération de l'interface de l'Opset.
         e = Opset.make_figure(self,f,phase,pos,name)
@@ -595,7 +679,11 @@ class Selector(Opset):
     
     
     def param(self):
-        """ Interface de paramétrage."""
+        """ Interface de paramétrage.
+        
+            Cette fonction affiche dans une cellule de dialogue les paramètres
+            courants et offre la possibilité de les modifier graphiquement.
+        """
         
         def update_parameters(width, sigma, max_order,
                               retry, percentile, sample, split):
