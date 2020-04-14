@@ -4,19 +4,24 @@ INSTANTS - Extracteur d'instants.
 
 Des fonctions de gestion de l'extracteur d'instants.
 
-
 **Versions**
 
 1.0.3 - Algorithmes.
 1.0.4 - Mise à jour de la doc.
+1.0.5 - Indicateurs rétrogrades et découpage L/R.
 
+
+todo::
+    - Choix des variables dans une liste à cocher.
+    - Progress bar pendant l'apprentissage.
+    
 Created on Fri March 27 19:27:00 2020
 
 @author: Jérôme Lacaille
 """
 
-__date__ = "2020-04-11"
-__version__ = '1.0.4'
+__date__ = "2020-04-12"
+__version__ = '1.0.5'
 
 import os
 import numpy as np
@@ -219,7 +224,7 @@ class Selector(Opset):
             
         # Nom du fichier de sauvegarde
         if idfilename is None:
-            i = self.storename.find('.')
+            i = self.storename.rfind('.')
             idfilename = self.storename[:i] + '_I' + self.storename[i:]
         
         # Liste des variables
@@ -285,7 +290,7 @@ class Selector(Opset):
                 C = np.vstack((C,a))
                 if first:
                     idnames = idnames + [colname]
-                    idcodes = idcodes + [(colname,0,0,0,0,0)]
+                    idcodes = idcodes + [(colname,0,0,0,0.0)]
                 name,unit = nameunit(colname)
                 for l in self.feature_params['range_width']:
                     w = 2*l + 1
@@ -295,16 +300,20 @@ class Selector(Opset):
                             for e in [1, -1]:
                                 c = indicator(a,w,d+1,e*s*eps,deg_poly)
                                 C = np.vstack((C,c))
+                                c = c[-1]-c
+                                C = np.vstack((C,c))
                                 if first: # len(k)>0 and k not in K:
-                                    code = 'w{}o{}'.format(l, d+1)
+                                    code = '{}o{}'.format(l, d+1)
                                     if e>0:
                                         code = code + 'u{}'.format(s)
                                     else:
                                         code = code + 'd{}'.format(s)
                                     idnames = idnames +\
-                                         ["{}[{}]".format(name,code)]
+                                         ["{}[+w{}]".format(name,code),
+                                          "{}[-w{}]".format(name,code)]
                                     idcodes = idcodes +\
-                                        [(colname, l, d, e*s, eps)]
+                                        [(colname,  l, d, e*s, eps),
+                                         (colname, -l, d, e*s, eps)]
             first = False
             dfi = pd.DataFrame(C.T, index=df.index, columns=idnames)
             self.idcodes = idcodes # On sauvegarde les indicateurs.
@@ -406,13 +415,16 @@ class Selector(Opset):
     
     def describe(self):
         """ Affiche l'arbre de décision final."""
+        if self._clf is None:
+            print("Nothing yet!")
+            return
+        
         codes = pd.DataFrame(data=self.idcodes, 
                              columns=['Name', 'Filter', 'Order', 'Sigma', 'Std'])
         codes.index.name = "Feature"
         print(codes)
         r = tree.export_text(self._clf)
         print(r)
-        
         
     
     def belief(self, arg=None):
@@ -435,6 +447,8 @@ class Selector(Opset):
         elif isinstance(arg,int):
             df = self.rewind(arg).df
             extern = False
+        else:
+            raise OpsetError(self.storename, "Bad argument.")
             
         if self._clf is None:
             return np.zeros(df.index.shape)
@@ -455,9 +469,11 @@ class Selector(Opset):
                     c = df[colname].values
             else:
                 a = df[colname].values
-                w = 2*l + 1
+                w = 2*np.abs(l) + 1
                 deg_poly = max(self.feature_params['max_order'],d)
                 c = indicator(a,w,d+1,es*eps,deg_poly)
+            if l<0:
+                c = c[-1]-c
             C = np.vstack((C,c))
             
         ip = clf.predict(C.T) # Eventuellement pondérer.
@@ -483,9 +499,6 @@ class Selector(Opset):
     def predict(self, arg=None):
         """ Renvoie la liste des instants prédits.
         
-            :param filename: Si un nom de fichier est passé, alors la méthode
-                             `load(filename)` est d'abord appelée.
-                             
             :return: Un dictionnaire avec les instants calculés.
         """
         
@@ -493,7 +506,7 @@ class Selector(Opset):
             if len(self.computed) == len(self.records):
                 return self.computed
             for df in self.iterator():
-                p = self.belief()
+                self.belief()
             return self.computed
         
         else:
@@ -509,8 +522,79 @@ class Selector(Opset):
             return r
     
     
+    def left(self,filename=None):
+        """ Extrait la partie amont d'un signal."""
+    
+        if self._clf is None:
+            raise OpsetError(self.storename,"Need learning before.")
+            
+        # Nom du fichier de sauvegarde
+        if filename is None:
+            i = self.storename.rfind('.')
+            filename = self.storename[:i] + 'L' + self.storename[i:]
+
+        dsl = Selector(filename).clean()
+        for df in self.iterator():
+            if not self.sigpos in self.computed:
+                self.belief()
+            i = self.computed[self.sigpos]
+            dsl.put(df.iloc[:i])
+            
+        return dsl.rewind()
+
+    
+    def right(self,filename=None):
+        """ Extrait la partie aval d'un signal."""
+    
+        if self._clf is None:
+            raise OpsetError(self.storename,"Need learning before.")
+            
+        # Nom du fichier de sauvegarde
+        if filename is None:
+            i = self.storename.rfind('.')
+            filename = self.storename[:i] + 'R' + self.storename[i:]
+
+        dsr = Selector(filename).clean()
+        for df in self.iterator():
+            if not self.sigpos in self.computed:
+                self.belief()
+            i = self.computed[self.sigpos]
+            dsr.put(df.iloc[i:])
+            
+        return dsr.rewind()
+    
+    
+    def between(self,left,right,filename=None):
+        """ Découpe el signal entre l'instant et une autre borne.
+        
+            Les paramètres `left` et `right` doivent être des dictionnaire de
+            sélection ou des Selectors.
+        """
+
+        if isinstance(left,Selector):
+            left = left.predict()
+        if isinstance(right,Selector):
+            right = right.predict()
+            
+        # Nom du fichier de sauvegarde
+        if filename is None:
+            i = self.storename.rfind('.')
+            filename = self.storename[:i] + 'B' + self.storename[i:]
+
+        dsb = Selector(filename).clean()
+        for df in self.iterator():
+            i = left[self.sigpos]
+            j = right[self.sigpos]
+            dsb.put(df.iloc[i:j])
+            
+        return dsb.rewind()
+    
+    
     def all_scores(self):
         """ Renvoie les écarts entre détection et label."""
+        
+        if self._clf is None:
+            return []
         
         scores = dict()
         for i in self.selected:
@@ -525,6 +609,9 @@ class Selector(Opset):
         
     def score(self):
         """ Renvoie l'écart maximal absolu de détection."""
+        
+        if self._clf is None:
+            return np.nan
         
         scores = self.all_scores()
         

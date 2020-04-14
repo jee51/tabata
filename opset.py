@@ -220,6 +220,9 @@ class Opset:
                                 par défaut (variable colname).
         """
         
+        if isinstance(storename,Opset):
+            storename = storename.storename
+            
         if not os.path.isfile(storename): # Il faut créer le fichier.
             newstore = pd.HDFStore(storename, mode='w')
             newstore.close()

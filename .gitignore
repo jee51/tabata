@@ -1,4 +1,5 @@
 **/data/out/*.h5
+**/data/out/*.pkl
 Untitled*.ipynb
 
 # Byte-compiled / optimized / DLL files
