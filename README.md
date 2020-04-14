@@ -1,22 +1,22 @@
 # Tabata
 Tabata est un package qui permet la manipulation de séries de signaux numériques.
 
-  tabata
-    |
-    + opset
-    |    + Opset
-    |
-    + etdex.py
-    |    + Etdex
-    |
-    + banalyse.py
-    |    + banalise
-    |
-    + instants
-    |    + Selector
-    |
-    + tubes
-         + Tube
+    tabata
+        |
+        + opset
+        |    + Opset
+        |
+        + etdex.py
+        |    + Etdex
+        |
+        + banalyse.py
+        |    + banalise
+        |
+        + instants
+        |    + Selector
+        |
+        + tubes
+             + Tube
 
 La plupart des analyses de données travaillent sur un tableau de mesures. Pourtant très souvent on a affaire à une liste de signaux. C'est le cas dans l'aéronautique quand on traite une série de vols (ou d'essais) et que chaque vol remonte un tableau de mesures indexé par le temps, souvent à une fréquence moyenne entre 1 Hz et 100 Hz. On a exactement la même chose quand on veut suivre les données d'usinage issues d'une machine-outil. Dans ce second cas, chaque pièce usinée donne un signal de mesures faites par la machine durant l'opération de production.
 
