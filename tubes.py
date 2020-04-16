@@ -30,7 +30,7 @@ import plotly.graph_objs as go
 from plotly.subplots import make_subplots
 from scipy import signal
 from sklearn import linear_model
-from tabata.opset import Opset, nameunit, OpsetError
+from tabata.opset import Opset, nameunit, get_colname, OpsetError
 
 ###########################################################################
 #%% Fonctions auxiliaires.
@@ -64,79 +64,70 @@ def highlight(origin,extract,filename=None):
     return ds.rewind()
     
     
-def plot(origin,pred):
-    """ Superpose le tube sur les données d'origine.
-    
-        :param data: un Opset initial.
-        :param tube: un Tube construit depuis l'origine.
+###########################################################################
+#%% Un affichage interactif permettant de visualiser le contenu de la liste.
+class OpTube(Opset):
+    """ L'Opset contenant les données à utiliser pour l'apprentissage.
     """
     
-    if not isinstance(origin,Opset):
-        raise OpsetError("Unknown","Should have an Opset as origin")
+    def __init__(self, origin, pred):
+        """ Initialise les listes d'instants et d'opération."""
+        Opset.__init__(self, origin.storename, 
+                       origin.phase, origin.sigpos, origin.colname)
         
-    if not isinstance(pred,Tube):
-        raise OpsetError(origin.storename,"Prediction shold be a Tube")
-        
-    if len(origin) != len(pred):
-        raise OpsetError(origin.storename,"Both inputs must have the same length")
-        
-    # ====================== Affichages ===========================                              
-    f = make_subplots(rows=1, cols=1)
-    f = go.FigureWidget(f)
-
-    # Récupération de l'interface de l'Opset.
-    e = origin.make_figure(f)
-    old_update = e['update_function']
-        
-    # Affichage de la proba de présence
-    pred.sigpos = origin.sigpos
-    pred.colname = origin.colname
-    z = pred.estimate()
-    f.add_trace(go.Scatter(x=pred.df.index, y=z, opacity=0.7,
-                           name='pred',
-                           line=dict(color='darkgreen', 
-                                     width=2)), 
-                row=1, col=1)       
+        self.pred = pred            
             
-    # ---- Begin: Callback Interactive  ----
-    def update_plot(colname, sigpos):
-        """ Mise à jour de l'affichage."""
-        old_update(colname,sigpos)
-            
-        pred.sigpos = origin.sigpos
-        pred.colname = origin.colname
-        z = pred.predict()
-        f.update_traces(selector=dict(name='pred'),
-                        x = self.df.index,
-                        y = z)            
-    # ---- End: Callback Interactive ----
+    def make_figure(self,f,phase=None,pos=None,name=None):
+        """ Création de l'interface graphique."""
 
-    # On remplace la fonction d'update (que l'on avait d'abord copiée).
-    e['update_function'] = update_plot 
-    
-    out = widgets.interactive(e['update_function'], 
-                              colname=e['variable_dropdown'], 
-                              sigpos=e['signal_slider'])
+        # Récupération de l'interface de l'Opset.
+        e = Opset.make_figure(self,f,phase,pos,name)
         
-    boxes = widgets.VBox([widgets.HBox([e['variable_dropdown'], 
-                                        e['previous_button'], 
-                                        e['next_button']]),
-                          widgets.HBox([f, e['signal_slider']])])
+        # self.sigpos et self.colname sont mis à jour, 
+        # ne pas utiliser ces variables ensuite.
+        old_update = e['update_function']
         
-    return boxes
-    
+        # Affichage de la proselfprésence
+        z = self.pred.rewind(self.sigpos).estimate(self.colname)
+        f.add_trace(go.Scatter(x=self.pred.df.index, y=z, opacity=0.7,
+                               name='pred',
+                               line=dict(color='darkgreen', 
+                                         width=2)), 
+                    row=1, col=1)       
+            
+        # =================================================================
+        # ---- Begin: Callback Interactive  ----
+        def update_plot(colname, sigpos):
+            """ Mise à jour de l'affichage.
+            """
+            old_update(colname,sigpos) # met à jour les positions.
+            
+            pred = self.pred.rewind(self.sigpos)
+            z = pred.estimate(self.colname)
+            f.update_traces(selector=dict(name='pred'),
+                            x = pred.df.index,
+                            y = z)            
+        # ---- End: Callback Interactive ----
+
+        # On remplace la fonction d'update (que l'on avait d'abord copiée).
+        e['update_function'] = update_plot 
+        return e
+
     
 ###########################################################################
 #%% Un affichage interactif permettant de visualiser le contenu de la liste.
 class Tube(Opset):
     """ L'Opset contenant les données à utiliser pour l'apprentissage.
+    
+    todo:: choisir les variables.
     """
     
     def __init__(self, storename, phase=None, pos=0, name=""):
         """ Initialise les listes d'instants et d'opération."""
         Opset.__init__(self, storename, phase, pos, name)
         
-        self._reg = None
+        self.variables = self.df.columns
+        self._reg = dict()
         self.learn_params = dict(samples_percent=0.01) 
             
             
@@ -151,14 +142,9 @@ class Tube(Opset):
         
         if len(self) == 0:
             raise OpsetError(self.storename,"No data")
-            
-        colname = self.colname
-        columns = self.df.columns
-        cols = [c for c in columns if c != colname]
         
-        p = self.learn_params['samples_percent']
         
-        # Fabrication des données d'apprentissage.
+        # ----------- Fabrication des données d'apprentissage -------------
         def find_best_parameters(p,colname,cols):
             X = []
             Y = []
@@ -182,30 +168,39 @@ class Tube(Opset):
             reg = reg.fit(dfx,dfy)
 
             return reg
-
-        reg = find_best_parameters(p,colname,cols)
-        self._reg = reg
-        return reg
+        # ------------------ Fin de l'optimisation ------------------------
+        
+        p = self.learn_params['samples_percent']
+        
+        columns = self.df.columns
+        for colname in self.variables:
+            cols = [c for c in columns if c != colname]
+            reg = find_best_parameters(p,colname,cols)
+            self._reg[colname] = reg
+        
+        return self._reg
     
     
-    def estimate(self):
+    def estimate(self, name=None):
         """ Renvoie la prédiction et le tube de confiance.
         
-            :param filename: Si un nom de fichier est passé, alors la méthode
-                             `load(filename)` est d'abord appelée.
-                             
-            :return: UN DataFrame contenant la variable prédite et ses bornes.
+            :return: un tableau numérique contenant les valeurs prédites.
         """
-        
-        df = self.df
 
-        colname = self.colname
-        columns = self.df.columns
-        cols = [c for c in columns if c != colname]
+        if name is None:
+            colname = self.colname
+            if colname not in self.variables:
+                raise OpsetError(self.storename,
+                                 "Not a predictable variable {}".format(colname))
+        else:
+            colname = get_colname(self.variables,name)
+            self.colname = colname
+            
+        df = self.df
+        cols = [c for c in df.columns if c != colname]
         
         x = df[cols]
-        y = df[colname]
-        z = self._reg.predict(x)
+        z = self._reg[colname].predict(x)
         
         return z
     

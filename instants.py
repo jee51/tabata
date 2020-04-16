@@ -581,7 +581,7 @@ class Selector(Opset):
             i = self.storename.rfind('.')
             filename = self.storename[:i] + 'B' + self.storename[i:]
 
-        dsb = Selector(filename).clean()
+        dsb = Opset(filename).clean()
         for df in self.iterator():
             i = left[self.sigpos]
             j = right[self.sigpos]
