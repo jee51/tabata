@@ -9,6 +9,7 @@ de prédiction sur d'autres données.
 **Versions**
 
 1.0.1 - Création.
+1.0.2 - Tabs pour l'apprentissage.
 
 
 todo::
@@ -19,8 +20,8 @@ Created on Mon April 13 12:04:00 2020
 @author: Jérôme Lacaille
 """
 
-__date__ = "2020-04-13"
-__version__ = '1.0.1'
+__date__ = "2020-04-18"
+__version__ = '1.0.2'
 
 import os
 import numpy as np
@@ -129,7 +130,7 @@ class Tube(Opset):
         """ Initialise les listes d'instants et d'opération."""
         Opset.__init__(self, storename, phase, pos, name)
         
-        self.variables = [self.df.columns[0]]
+        self.variables = set([self.df.columns[0]])
         self._reg = dict()
         self.learn_params = dict(samples_percent=0.01) 
             
@@ -140,7 +141,7 @@ class Tube(Opset):
         return "{}\n" \
                "TUBE : ...".format(Opset.__repr__(self))
     
-    def fit(self):
+    def fit(self, progress_bar=None, message_label=None):
         """ Apprentissage d'un modèle."""
         
         if len(self) == 0:
@@ -238,6 +239,7 @@ class Tube(Opset):
             """
             old_update(colname,sigpos) # met à jour les positions.
             
+            #self.variables.add(self.colname)
             z = self.estimate()
             f.update_traces(selector=dict(name='pred'),
                             x = self.df.index,
@@ -252,11 +254,30 @@ class Tube(Opset):
         wlmv = widgets.SelectMultiple(options = self.df.columns,
                                       value = tuple(self.variables),
                                       description = 'To learn',
+                                      rows=8,
                                       disabled = False)
 
+        def update_variable(*args):
+            self.variables.add(e['variable_dropdown'].value)
+            wlmv.value = tuple(self.variables)
+            
         e['variable_selection'] = wlmv
+        e['variable_dropdown'].observe(update_variable,'value')
         # -------- Fin de liste ---------
         
+        # =================================================================
+        # --------- Barre de progression  ------------
+        wp = widgets.IntProgress(value=0, min=0, max=10, step=1,
+                                 description='Progress:',
+                                 bar_style='', # 'success','info','warning','danger',''
+                                 orientation='horizontal',
+                                 layout=widgets.Layout(width='500px'))      
+        e['progress_bar'] = wp
+        
+        wml = widgets.Label(value="")
+        e['message_label'] = wml
+        # --------- Fin de progression --------
+
         # =================================================================
         # Boutton pour l'apprentissage.
         wbl = widgets.Button(description='Learn')
@@ -270,11 +291,11 @@ class Tube(Opset):
         # ---- Callback ----
         def wbl_on_click(b):
             """ Callbacks du boutton d'apprentissage."""
-            self.variables = list(wlmv.value)
+            self.variables = set(wlmv.value)
             
             b.button_style = 'warning'
             b.description = 'Learning...'
-            self.fit()
+            self.fit(progress_bar=wp, message_label=wml)
             update_plot(self.colname,self.sigpos)
             b.description = 'Relearn'
             b.button_style = 'success'
@@ -298,13 +319,20 @@ class Tube(Opset):
                                   colname=e['variable_dropdown'], 
                                   sigpos=e['signal_slider'])
         
-        boxes = widgets.VBox(
+        bxplot = widgets.VBox(
             [widgets.HBox([e['variable_dropdown'], 
                            e['previous_button'], e['next_button']]),
-             widgets.HBox([f, e['signal_slider']]),
-             widgets.HBox([e['variable_selection'], e['learn_button']])
+             widgets.HBox([f, e['signal_slider']])
             ])
         
-        return boxes
+        bxlearn = widgets.VBox([e['progress_bar'], 
+                                widgets.HBox([e['variable_selection'], 
+                                              widgets.VBox([e['message_label'],
+                                                            e['learn_button']])])])
+        
+        tabs = widgets.Tab(children = [bxplot, bxlearn])
+        tabs.set_title(0, "Plot")
+        tabs.set_title(1, "Learn")
+        return tabs
 
     

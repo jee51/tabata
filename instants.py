@@ -11,6 +11,8 @@ Des fonctions de gestion de l'extracteur d'instants.
 1.0.5 - Indicateurs rétrogrades et découpage L/R.
 1.0.6 - L'apprentissage retourne self.
         Réinstallation du pointeur après extraction.
+1.0.7 - Tabs pour l'apprentissage
+1.0.8 - Limitation des indicateurs si l'isntant est proche d'un bord.
 
 
 todo::
@@ -22,8 +24,8 @@ Created on Fri March 27 19:27:00 2020
 @author: Jérôme Lacaille
 """
 
-__date__ = "2020-04-17"
-__version__ = '1.0.6'
+__date__ = "2020-04-18"
+__version__ = '1.0.8'
 
 import os
 import numpy as np
@@ -204,7 +206,7 @@ class Selector(Opset):
         
     
     # ================== Apprentissage ====================================
-    def make_indicators(self, idfilename=None):
+    def make_indicators(self, idfilename=None, progress_bar=None, message_label=None):
         """ Construction de l'Opset des indicateurs.
         
             Pour toutes les opérations pour lesquelles l'expert à identifié
@@ -241,7 +243,11 @@ class Selector(Opset):
         for df in self[obs]:
             L = L +[len(df)]
             data.append(df[colnames])
-            
+        Q = np.array(list(ind))/np.array(L)
+        Qmin = Q.min()
+        Qmax = Q.max()
+        
+        
         # Demi largeur minimale du filtre.
         if self.feature_params['range_width'] is None:
             L0 = max(10,int(np.floor(np.min(L)/100)))
@@ -250,10 +256,19 @@ class Selector(Opset):
         # Ordre de dérivation.
         max_order = self.feature_params['max_order']
         deg_poly = max(2,max_order)
-        
+
+        # Barre de progression.
+        range_width = self.feature_params['range_width']
+        range_sigma = self.feature_params['range_sigma']
+        if progress_bar:
+            add_max = len(data)*len(colnames)*len(range_width)*max_order*2
+            progress_bar.max += add_max
+            
         # Calcul des epsilons.
+        if message_label:
+            message_label.value = "Estimating local variances ..."
         epsilon = dict()
-        for l in self.feature_params['range_width']:
+        for l in range_width:
             w = 2*l+1 # La largeur doit être impaire pour SG.
             R = np.ndarray((max_order,len(colnames)))
             for d in range(max_order):
@@ -261,6 +276,8 @@ class Selector(Opset):
                     r = []
                     k = 0
                     for df in data:
+                        if progress_bar:
+                            progress_bar.value += 1
                         a = df[colname]
                         b = signal.savgol_filter(a,
                                                  window_length=w,
@@ -275,6 +292,8 @@ class Selector(Opset):
             epsilon[w] = R
             
         # Calcul des indicateurs.
+        if message_label:
+            message_label.value = "Computing indicators ..."
         idcodes = []
         first = True
         dsi = Selector(idfilename)
@@ -294,28 +313,34 @@ class Selector(Opset):
                     idnames = idnames + [colname]
                     idcodes = idcodes + [(colname,0,0,0,0.0)]
                 name,unit = nameunit(colname)
-                for l in self.feature_params['range_width']:
+                for l in range_width:
                     w = 2*l + 1
                     for d in range(max_order):
+                        if progress_bar:
+                            progress_bar.value += 1
                         eps = epsilon[w][d,i]
-                        for s in self.feature_params['range_sigma']:
+                        for s in range_sigma:
                             for e in [1, -1]:
                                 c = indicator(a,w,d+1,e*s*eps,deg_poly)
-                                C = np.vstack((C,c))
-                                c = c[-1]-c
-                                C = np.vstack((C,c))
+                                if Qmin<0.65:
+                                    C = np.vstack((C,c))
+                                if Qmax>0.35:
+                                    c = c[-1]-c
+                                    C = np.vstack((C,c))
                                 if first: # len(k)>0 and k not in K:
                                     code = '{}o{}'.format(l, d+1)
                                     if e>0:
                                         code = code + 'u{}'.format(s)
                                     else:
                                         code = code + 'd{}'.format(s)
-                                    idnames = idnames +\
-                                         ["{}[+w{}]".format(name,code),
-                                          "{}[-w{}]".format(name,code)]
-                                    idcodes = idcodes +\
-                                        [(colname,  l, d, e*s, eps),
-                                         (colname, -l, d, e*s, eps)]
+                                    if Qmin<0.65:
+                                        idnames = idnames +\
+                                             ["{}[+w{}]".format(name,code),
+                                              "{}[-w{}]".format(name,code)]
+                                    if Qmax>0.35:
+                                        idcodes = idcodes +\
+                                            [(colname,  l, d, e*s, eps),
+                                             (colname, -l, d, e*s, eps)]
             first = False
             dfi = pd.DataFrame(C.T, index=df.index, columns=idnames)
             self.idcodes = idcodes # On sauvegarde les indicateurs.
@@ -330,7 +355,7 @@ class Selector(Opset):
         return dsi
     
     
-    def fit(self):
+    def fit(self, progress_bar=None, message_label=None):
         """ Apprend un arbre de décision basé sur les indicateurs.
 
             Cette fonction crée les indicateurs par l'appel de 
@@ -341,19 +366,9 @@ class Selector(Opset):
             une liste réduite d'indicateurs pertinets. Ensuite on recrée un
             arbre définitif à partir de cette sous-sélection.
         """
-           
-        # On vérifie s'il faut recréer les indicateurs.
-        dsi = self._dsi
-        if dsi:
-            colnames = {c[0] for c in dsi.idcodes[3:]}
-            if colnames != self.variables or dsi.computed != self.selected:
-                dsi = None
-        if dsi is None:
-            print("Building indicators ...")
-            dsi = self.make_indicators()
-            
-
-        # Fabrication des données d'apprentissage.
+        
+        # #################################################################
+        # ----------- Fabrication des données d'apprentissage -------------
         def find_best_parameters(p,split,cols=None):
             X = []
             Y = []
@@ -379,17 +394,44 @@ class Selector(Opset):
             clf = clf.fit(dfx,dfy)
 
             return clf
+        # ------------- Fin du code d'optimisation ----------------
+        
+        # Barre de progression.
+        rn = self.learn_params['retry_number']
+        dsi = self._dsi
+        if progress_bar:
+            progress_bar.max = rn+3
+            progress_bar.value = 1
+            
+        # On vérifie s'il faut recréer les indicateurs.
+        if dsi:
+            colnames = {c[0] for c in dsi.idcodes[3:]}
+            if colnames != self.variables or \
+                           list(dsi.computed.values()) != list(self.selected.values()):
+                dsi = None
+        if dsi is None:
+            if message_label:
+                message_label.value = "Rebuilding indicators ..."
+            dsi = self.make_indicators(progress_bar=progress_bar,
+                                       message_label=message_label)
+                
     
-    
+        if message_label:
+            message_label.value = "Searching features ..."
         fi = np.zeros(len(dsi.df.columns))
-        for k in range(self.learn_params['retry_number']):
+        for k in range(rn):
             clf =  find_best_parameters(self.learn_params['samples_percent'],
                                         self.learn_params['min_samples_split'])
             fi += clf.feature_importances_
+            if progress_bar:
+                progress_bar.value += 1
+                
         seuil = np.percentile(fi,self.learn_params['retry_percentile'])
         keepcols = np.argwhere(fi>seuil).ravel().tolist()
         
         # Apprentissage final.
+        if message_label:
+            message_label.value = "Searching rules ..."
         print("First keeping {} indicators over {}"\
               .format(len(keepcols),len(dsi.idcodes)))
         p1 = self.learn_params['samples_percent']*self.learn_params['retry_number'] ;
@@ -397,7 +439,9 @@ class Selector(Opset):
                                    self.learn_params['min_samples_split'],
                                    keepcols)
         fi = clf.feature_importances_
-        
+        if progress_bar:
+                progress_bar.value += 1
+                
         while np.sum(fi==0)>0:
             newcols = np.array(keepcols)[fi>0]
             keepcols = newcols.tolist()
@@ -406,6 +450,8 @@ class Selector(Opset):
                                    keepcols)
             fi = clf.feature_importances_
                        
+        if progress_bar:
+                progress_bar.value += 1
         print("Then  keeping {} indicators over {}"\
               .format(len(keepcols),len(dsi.idcodes)))
         self.idcodes = [dsi.idcodes[i] for i in keepcols]
@@ -714,7 +760,30 @@ class Selector(Opset):
                                   row=1, col=1)
         # ---- End: Callback Interactive ----
         
-                
+        # =================================================================
+        # --------- Liste de sélection des variables à prédire ------------
+        wlmv = widgets.SelectMultiple(options = self.df.columns,
+                                      value = tuple(self.variables),
+                                      description = 'To learn',
+                                      rows=8,
+                                      disabled = False)
+
+        e['variable_selection'] = wlmv
+        # -------- Fin de liste ---------
+
+        # =================================================================
+        # --------- Barre de progression  ------------
+        wp = widgets.IntProgress(value=0, min=0, max=10, step=1,
+                                 description='Progress:',
+                                 bar_style='', # 'success','info','warning','danger',''
+                                 orientation='horizontal',
+                                 layout=widgets.Layout(width='500px'))      
+        e['progress_bar'] = wp
+        
+        wml = widgets.Label(value="")
+        e['message_label'] = wml
+        # --------- Fin de progression --------
+        
         # =================================================================
         # Boutton pour l'apprentissage.
         wbl = widgets.Button(description='Learn')
@@ -732,16 +801,20 @@ class Selector(Opset):
         # ---- Callback ----
         def wbl_on_click(b):
             """ Callbacks du boutton d'apprentissage."""
+            self.variables = set(wlmv.value)
+            
+            wml.value = ""
             b.button_style = 'warning'
             b.description = 'Learning...'
             if not self.selected:
                 b.description = 'No Target'
                 b.button_style = 'danger'
             else:
-                self.fit()
+                self.fit(progress_bar=wp, message_label=wml)
                 update_plot(self.colname,self.sigpos,wf.value)
                 b.description = 'Relearn'
                 b.button_style = 'success'
+                wml.value = ""
         # ---- Callback ----
 
         wbl.on_click(wbl_on_click)
@@ -770,6 +843,7 @@ class Selector(Opset):
                     'width': 2,
                     'dash': 'dashdot'}}]
                 self.variables.add(self.colname)
+                wlmv.value = tuple(self.variables)
                 self.selected[self.sigpos] = i1
             if self.selected:
                 if self._clf:
@@ -798,7 +872,7 @@ class Selector(Opset):
                                orientation='horizontal',
                                description='Filter',
                                continuous_update=False,
-                               layout=widgets.Layout(width='400px'))
+                               layout=widgets.Layout(width='500px'))
            
             
         # Afficher la barre si un signal est présent.
@@ -809,30 +883,6 @@ class Selector(Opset):
         e['filter_slider'] = wf
         e['learn_button'] = wbl
         return e
-    
-    
-    def plot(self,phase=None,pos=None,name=None):
-        """ On ajoute à l'affichage de l'Opset une sélection d'instants."""
-        f = make_subplots(rows=2, cols=1,
-                          shared_xaxes=True,
-                          vertical_spacing=0.03,
-                          specs=[[{"type": "scatter"}],
-                                [{"type": "scatter"}]])
-        f = go.FigureWidget(f)
-        e = self.make_figure(f,phase,pos,name)
-        out = widgets.interactive(e['update_function'], 
-                                  colname=e['variable_dropdown'], 
-                                  sigpos=e['signal_slider'],
-                                  width=e['filter_slider'])
-        
-        boxes = widgets.VBox(
-            [widgets.HBox([e['variable_dropdown'], 
-                          e['previous_button'], e['next_button']]),
-             widgets.HBox([f, e['signal_slider']]),
-             widgets.HBox([e['filter_slider'], e['learn_button']])
-            ])
-        
-        return boxes
     
     
     def param(self):
@@ -857,7 +907,6 @@ class Selector(Opset):
           
         # =================================================================
         # Widgets pour les indicateurs.
-        print("Feature parameters (.feature_params):")
         wfrw = widgets.Textarea(description = "Range", 
                                value = repr(self.feature_params['range_width']),
                                placeholder = '____________________')
@@ -867,14 +916,13 @@ class Selector(Opset):
         wfmo = widgets.IntText(description = "Max Order", 
                                value = self.feature_params['max_order'])
 
-        fbox = widgets.VBox([widgets.HBox([wfrw, wfrs]),
+        fbox = widgets.VBox([widgets.Label("Peature parameters (.feature_params):"),
+                             widgets.HBox([wfrw, wfrs]),
                              widgets.HBox([wfmo])])
         
-        display(fbox) ;
         
         # =================================================================
         # Widgets pour l'apprentissage.
-        print("\nLearning parameters (.learn_params):")
         wtrn = widgets.IntText(description = "Retry", 
                                value = self.learn_params['retry_number'])
         wtrp = widgets.IntText(description = "Percentile", 
@@ -884,13 +932,51 @@ class Selector(Opset):
         wtss = widgets.FloatText(description = "Split", 
                                  value = self.learn_params['min_samples_split'])
         
-        lbox = widgets.VBox([widgets.HBox([wtrn, wtrp]),
+        lbox = widgets.VBox([widgets.Label(value="Learning parameters (.learn_params):"),
+                             widgets.HBox([wtrn, wtrp]),
                              widgets.HBox([wtsp, wtss])])
         
         out = widgets.interactive(update_parameters,
                                   width=wfrw, sigma=wfrs, max_order=wfmo,
                                   retry=wtrn, percentile=wtrp,
                                   sample=wtsp, split=wtss)
+
+        return widgets.VBox([fbox, lbox])
         
-        display(lbox)
+    
+    def plot(self,phase=None,pos=None,name=None):
+        """ On ajoute à l'affichage de l'Opset une sélection d'instants."""
+        f = make_subplots(rows=2, cols=1,
+                          shared_xaxes=True,
+                          vertical_spacing=0.03,
+                          specs=[[{"type": "scatter"}],
+                                [{"type": "scatter"}]])
+        f = go.FigureWidget(f)
+        e = self.make_figure(f,phase,pos,name)
+        out = widgets.interactive(e['update_function'], 
+                                  colname=e['variable_dropdown'], 
+                                  sigpos=e['signal_slider'],
+                                  width=e['filter_slider'])
         
+        boxes = widgets.VBox(
+            [widgets.HBox([e['variable_dropdown'], 
+                          e['previous_button'], e['next_button']]),
+             widgets.HBox([f, e['signal_slider']]),
+             widgets.HBox([e['filter_slider']])
+            ])
+        
+        params = self.param()
+        
+        learn = widgets.VBox([e['progress_bar'], 
+                              widgets.HBox([e['variable_selection'], 
+                                            widgets.VBox([e['message_label'],
+                                                          e['learn_button']])])])
+                              
+        tabs = widgets.Tab(children = [boxes, params, learn])
+        tabs.set_title(0, "Plot")
+        tabs.set_title(1, "Param")
+        tabs.set_title(2, "Learn")
+        
+        return tabs
+    
+    
