@@ -56,7 +56,7 @@ def highlight(origin,extract,filename=None):
     
     ds = Opset(filename).clean()
     sigpos = origin.sigpos
-    for df in origin.iterator():
+    for df in origin:
         dfe = extract[origin.sigpos]
         df["INTERVAL"] = np.isin(df.index,dfe.index)
         ds.put(df)
@@ -153,7 +153,7 @@ class Tube(Opset):
             X = []
             Y = []
             i0 = 0
-            for df in self.iterator():
+            for df in self:
                 n = len(df)
                 pos = np.random.choice(np.arange(n),int(np.ceil(n*p)))
                 df1 = df.iloc[pos]

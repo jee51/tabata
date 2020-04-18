@@ -9,11 +9,13 @@ la recherche.
 * Les noms de variables sont composées d'un nom suivi de l'unité entre crochets "[]".
 * La fonction auxiliaire `nameunit()` décompose le nom d'une variable.
 * L'itérateur `iterator()` renvoie un itérateur sur les observations du fichier HDF5.
-* L'`Opset` est une classe permettant de visualiser interactivement le contenu.
+* L'indexation de l'Opset renvoie un DataFrame, et il est plus simple d'itérer sur un slice.
+* L'Opset est une classe permettant de visualiser interactivement le contenu.
 
 **Versions**
 
 1.0.3 - Algorithmes d'instants.
+1.0.4 - Indextion négative et itération avec retour à l'origine.
 
 
 Created on Wed May  9 16:50:34 2018
@@ -246,6 +248,7 @@ class Opset:
         self.colname = colname
         self.phase = phase
         
+        self._tmppos = 0 # Variable cachée pour l'itération.
         
     def __repr__(self):
         """ Affichage du nom de l'Opset et de la liste des instants selectionnés."""
@@ -260,21 +263,33 @@ class Opset:
     def __len__(self):
         """ La longueur de l'Opset."""
         return len(self.records)
-    
+        
     def __getitem__(self,pos):
         """ Récupère le DataFrame à la position souhaitée.
             
             Déplace le pointeur en conséquence.
         """
         
-        if pos<0 or pos>= len(self.records):
+        if isinstance(pos,slice):
+            ind = range(len(self.records))
+            return self.iterator(ind[pos])
+        
+        if hasattr(pos, '__iter__'):
+            return self.iterator(pos)
+        
+        if pos<=-len(self.records) or pos>= len(self.records):
             raise OpsetError(self.storename,
-                            "La position doit être comprise entre 0 \
-                            et {}".format(len(self.records)-1))
+                            "La position doit être comprise entre {} \
+                            et {}".format(-len(self.records),len(self.records)-1))
     
-        self.sigpos = pos
-        rec = self.records[pos]
-        self.df = pd.read_hdf(self.storename, rec)
+        if pos<0:
+            pos = len(self.records)+pos
+        
+        if pos != self.sigpos:
+            self.sigpos = pos
+            rec = self.records[pos]
+            self.df = pd.read_hdf(self.storename, rec)
+            
         return self.df
         
     
@@ -302,12 +317,12 @@ class Opset:
         else:
             seq = range(*argv)
             
+        _tmppos = self.sigpos
+        
         for i in seq:
-            self.sigpos = i
-            rec = self.records[i]
-            self.df = pd.read_hdf(self.storename, rec)
-            yield self.df
+            yield self[i]
     
+        self[_tmppos]
     
     def rewind(self,sigpos=0):
         """ Réinitialisation du pointeur au début du fichier.
@@ -315,11 +330,21 @@ class Opset:
             Cette méthode renvoie l'Opset ce qui fait qu'on peut 
             enchainer les appels.
         """
-        for df in self.iterator(sigpos,sigpos+1):
-            pass
-        
+        self[sigpos]
         return self
     
+    def __iter__(self):
+        return self.iterator()
+#        self._tmppos = self.sigpos
+#        self.rewind()
+#        self.sigpos = -1 # Juste pour l'itération.
+#        return self
+    
+#    def __next__(self):
+#        if self.sigpos+1 == len(self.records):
+#            self[self._tmppos]
+#            raise StopIteration
+#        return self[self.sigpos+1]
     
     def current_record(self):
         """ Renvoie le nom de l'enregistrement courant."""

@@ -238,7 +238,7 @@ class Selector(Opset):
         # Mémorisation des données utiles dans une liste data.
         data = [] # Une liste de matrices de signaux.
         L = []    # Les longueurs de chaque signal.
-        for df in self.iterator(obs):
+        for df in self[obs]:
             L = L +[len(df)]
             data.append(df[colnames])
             
@@ -358,7 +358,7 @@ class Selector(Opset):
             X = []
             Y = []
             i0 = 0
-            for df in dsi.iterator():
+            for df in dsi:
                 n = len(df)
                 ind = dsi.computed[dsi.sigpos]
                 pos = np.random.choice(np.arange(n),int(np.ceil(n*p)))
@@ -509,7 +509,7 @@ class Selector(Opset):
                 return self.computed
             
             sigpos = self.sigpos
-            for df in self.iterator():
+            for df in self:
                 self.belief()
             self.rewind(sigpos)
             return self.computed
@@ -521,7 +521,7 @@ class Selector(Opset):
                 ds = Opset(arg)
             r = dict()
             sigpos = ds.sigpos
-            for i,df in enumerate(ds.iterator()):
+            for i,df in enumerate(ds):
                 p = self.belief(df)
                 mx = np.argmax(p)
                 r[i] = mx
@@ -543,7 +543,7 @@ class Selector(Opset):
             filename = self.storename[:i] + 'L' + self.storename[i:]
 
         dsl = Selector(filename).clean()
-        for df in self.iterator():
+        for df in self:
             if not self.sigpos in self.computed:
                 self.belief()
             i = self.computed[self.sigpos]
@@ -567,7 +567,7 @@ class Selector(Opset):
             filename = self.storename[:i] + 'R' + self.storename[i:]
 
         dsr = Selector(filename).clean()
-        for df in self.iterator():
+        for df in self:
             if not self.sigpos in self.computed:
                 self.belief()
             i = self.computed[self.sigpos]
@@ -597,7 +597,7 @@ class Selector(Opset):
         sigpos = self.sigpos
         
         dsb = Opset(filename).clean()
-        for df in self.iterator():
+        for df in self:
             i = left[self.sigpos]
             j = right[self.sigpos]
             dsb.put(df.iloc[i:j])
