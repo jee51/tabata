@@ -55,10 +55,12 @@ def highlight(origin,extract,filename=None):
         filename = origin.storename[:i] + '_E' + origin.storename[i:]
     
     ds = Opset(filename).clean()
+    sigpos = origin.sigpos
     for df in origin.iterator():
         dfe = extract[origin.sigpos]
         df["INTERVAL"] = np.isin(df.index,dfe.index)
         ds.put(df)
+    origin.rewind(sigpos)
     ds.phase = "INTERVAL"
     
     return ds.rewind()
@@ -103,6 +105,7 @@ class OpTube(Opset):
             old_update(colname,sigpos) # met à jour les positions.
             
             pred = self.pred.rewind(self.sigpos)
+            print('Ask for', self.colname)
             z = pred.estimate(self.colname)
             f.update_traces(selector=dict(name='pred'),
                             x = pred.df.index,
@@ -126,7 +129,7 @@ class Tube(Opset):
         """ Initialise les listes d'instants et d'opération."""
         Opset.__init__(self, storename, phase, pos, name)
         
-        self.variables = self.df.columns
+        self.variables = [self.df.columns[0]]
         self._reg = dict()
         self.learn_params = dict(samples_percent=0.01) 
             
@@ -143,6 +146,7 @@ class Tube(Opset):
         if len(self) == 0:
             raise OpsetError(self.storename,"No data")
         
+        sigpos = self.sigpos
         
         # ----------- Fabrication des données d'apprentissage -------------
         def find_best_parameters(p,colname,cols):
@@ -178,7 +182,7 @@ class Tube(Opset):
             reg = find_best_parameters(p,colname,cols)
             self._reg[colname] = reg
         
-        return self._reg
+        return self.rewind(sigpos)
     
     
     def estimate(self, name=None):
@@ -189,18 +193,20 @@ class Tube(Opset):
 
         if name is None:
             colname = self.colname
-            if colname not in self.variables:
-                raise OpsetError(self.storename,
-                                 "Not a predictable variable {}".format(colname))
         else:
-            colname = get_colname(self.variables,name)
-            self.colname = colname
+            colname = get_colname(self.df.columns,name)
             
         df = self.df
-        cols = [c for c in df.columns if c != colname]
+        if colname not in self._reg:
+            y = df[colname].values
+            z = np.zeros(y.shape)
+            z.fill(np.nan)
         
-        x = df[cols]
-        z = self._reg[colname].predict(x)
+        else:
+            cols = [c for c in df.columns if c != colname]
+        
+            x = df[cols]
+            z = self._reg[colname].predict(x)
         
         return z
     
@@ -214,8 +220,8 @@ class Tube(Opset):
         # Récupération de l'interface de l'Opset.
         e = Opset.make_figure(self,f,phase,pos,name)
         
-        # self.sigpos et self.colname sont mis à jour, 
-        # ne pas utiliser ces variables ensuite.
+        
+        # =================================================================
         old_update = e['update_function']
         
         # Affichage de la proba de présence
@@ -226,7 +232,6 @@ class Tube(Opset):
                                          width=2)), 
                     row=1, col=1)       
             
-        # =================================================================
         # ---- Begin: Callback Interactive  ----
         def update_plot(colname, sigpos):
             """ Mise à jour de l'affichage.
@@ -237,10 +242,69 @@ class Tube(Opset):
             f.update_traces(selector=dict(name='pred'),
                             x = self.df.index,
                             y = z)            
-        # ---- End: Callback Interactive ----
-
+        
         # On remplace la fonction d'update (que l'on avait d'abord copiée).
         e['update_function'] = update_plot 
+        # ---- End: Callback Interactive ----
+        
+        # =================================================================
+        # --------- Liste de sélection des variables à prédire ------------
+        wlmv = widgets.SelectMultiple(options = self.df.columns,
+                                      value = tuple(self.variables),
+                                      description = 'To learn',
+                                      disabled = False)
+
+        e['variable_selection'] = wlmv
+        # -------- Fin de liste ---------
+        
+        # =================================================================
+        # Boutton pour l'apprentissage.
+        wbl = widgets.Button(description='Learn')
+        if self._reg:
+            wbl.description = 'Relearn'
+            wbl.button_style = 'success'    
+        else:
+            wbl.description = 'Learn'
+            wbl.button_style = 'info'
+        
+        # ---- Callback ----
+        def wbl_on_click(b):
+            """ Callbacks du boutton d'apprentissage."""
+            self.variables = list(wlmv.value)
+            
+            b.button_style = 'warning'
+            b.description = 'Learning...'
+            self.fit()
+            update_plot(self.colname,self.sigpos)
+            b.description = 'Relearn'
+            b.button_style = 'success'
+        # ---- Callback ----
+
+        wbl.on_click(wbl_on_click)
+        
+        e['learn_button'] = wbl
+        # -------- Fin de l'apperntissgae --------
+        
         return e
+
+    
+    def plot(self,phase=None,pos=None,name=None):
+        """ On ajoute à l'affichage de l'Opset une sélection d'instants."""
+        f = make_subplots(rows=1, cols=1,
+                          specs=[[{"type": "scatter"}]])
+        f = go.FigureWidget(f)
+        e = self.make_figure(f,phase,pos,name)
+        out = widgets.interactive(e['update_function'], 
+                                  colname=e['variable_dropdown'], 
+                                  sigpos=e['signal_slider'])
+        
+        boxes = widgets.VBox(
+            [widgets.HBox([e['variable_dropdown'], 
+                           e['previous_button'], e['next_button']]),
+             widgets.HBox([f, e['signal_slider']]),
+             widgets.HBox([e['variable_selection'], e['learn_button']])
+            ])
+        
+        return boxes
 
     

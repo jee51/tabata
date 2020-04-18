@@ -9,6 +9,8 @@ Des fonctions de gestion de l'extracteur d'instants.
 1.0.3 - Algorithmes.
 1.0.4 - Mise à jour de la doc.
 1.0.5 - Indicateurs rétrogrades et découpage L/R.
+1.0.6 - L'apprentissage retourne self.
+        Réinstallation du pointeur après extraction.
 
 
 todo::
@@ -20,8 +22,8 @@ Created on Fri March 27 19:27:00 2020
 @author: Jérôme Lacaille
 """
 
-__date__ = "2020-04-12"
-__version__ = '1.0.5'
+__date__ = "2020-04-17"
+__version__ = '1.0.6'
 
 import os
 import numpy as np
@@ -410,7 +412,7 @@ class Selector(Opset):
         self._clf = clf
         self.computed = dict()
         
-        return clf
+        return self
     
     
     def describe(self):
@@ -505,20 +507,25 @@ class Selector(Opset):
         if arg is None:
             if len(self.computed) == len(self.records):
                 return self.computed
+            
+            sigpos = self.sigpos
             for df in self.iterator():
                 self.belief()
+            self.rewind(sigpos)
             return self.computed
-        
+            
         else:
             if isinstance(arg,Opset):
                 ds = arg
             else:
                 ds = Opset(arg)
             r = dict()
+            sigpos = ds.sigpos
             for i,df in enumerate(ds.iterator()):
                 p = self.belief(df)
                 mx = np.argmax(p)
                 r[i] = mx
+            ds.rewind(sigpos)
             return r
     
     
@@ -528,6 +535,8 @@ class Selector(Opset):
         if self._clf is None:
             raise OpsetError(self.storename,"Need learning before.")
             
+        sigpos = self.sigpos
+        
         # Nom du fichier de sauvegarde
         if filename is None:
             i = self.storename.rfind('.')
@@ -539,7 +548,8 @@ class Selector(Opset):
                 self.belief()
             i = self.computed[self.sigpos]
             dsl.put(df.iloc[:i])
-            
+        
+        self.rewind(sigpos)
         return dsl.rewind()
 
     
@@ -548,7 +558,9 @@ class Selector(Opset):
     
         if self._clf is None:
             raise OpsetError(self.storename,"Need learning before.")
-            
+    
+        sigpos = self.sigpos
+        
         # Nom du fichier de sauvegarde
         if filename is None:
             i = self.storename.rfind('.')
@@ -560,7 +572,8 @@ class Selector(Opset):
                 self.belief()
             i = self.computed[self.sigpos]
             dsr.put(df.iloc[i:])
-            
+        
+        self.rewind(sigpos)
         return dsr.rewind()
     
     
@@ -575,18 +588,21 @@ class Selector(Opset):
             left = left.predict()
         if isinstance(right,Selector):
             right = right.predict()
-            
+                   
         # Nom du fichier de sauvegarde
         if filename is None:
             i = self.storename.rfind('.')
             filename = self.storename[:i] + 'B' + self.storename[i:]
 
+        sigpos = self.sigpos
+        
         dsb = Opset(filename).clean()
         for df in self.iterator():
             i = left[self.sigpos]
             j = right[self.sigpos]
             dsb.put(df.iloc[i:j])
-            
+        
+        self.rewind(sigpos)
         return dsb.rewind()
     
     
