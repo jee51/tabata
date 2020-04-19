@@ -916,7 +916,7 @@ class Selector(Opset):
         wfmo = widgets.IntText(description = "Max Order", 
                                value = self.feature_params['max_order'])
 
-        fbox = widgets.VBox([widgets.Label("Peature parameters (.feature_params):"),
+        fbox = widgets.VBox([widgets.Label("Feature parameters (.feature_params):"),
                              widgets.HBox([wfrw, wfrs]),
                              widgets.HBox([wfmo])])
         

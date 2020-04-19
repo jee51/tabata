@@ -131,8 +131,12 @@ class Tube(Opset):
         Opset.__init__(self, storename, phase, pos, name)
         
         self.variables = set([self.df.columns[0]])
+        self.factors = set(self.df.columns)
         self._reg = dict()
-        self.learn_params = dict(samples_percent=0.01) 
+        self.learn_params = dict(retry_number = 10,
+                                 keep_best_number = 5,
+                                 samples_percent = 0.01,
+                                 max_features = 5) 
             
             
     def __repr__(self):
@@ -141,48 +145,92 @@ class Tube(Opset):
         return "{}\n" \
                "TUBE : ...".format(Opset.__repr__(self))
     
+    
+    def build_tube(self, colname, progress_bar=None):
+        """ Création d'un tube pour une colonne."""
+        
+        retry_number = self.learn_params['retry_number']
+        samples_percent = self.learn_params['samples_percent']
+        max_features = self.learn_params['max_features']
+        keep_best_number = self.learn_params['keep_best_number']
+        
+        reg_pop = dict()
+        columns = self.factors
+        cols = [c for c in columns if c != colname]
+        nbcols = len(cols)
+            
+        for i in range(retry_number):
+            if progress_bar:
+                progress_bar.value += 1
+                
+            # Choix des facteurs
+            cc = np.random.permutation(cols)
+            n = np.random.permutation(nbcols)+1
+            n = np.min([n[0],max_features,nbcols])
+            cc = cc[:n]
+            X1 = []
+            Y1 = []
+            X2 = []
+            Y2 = []
+            i0 = 0
+            for df in self:
+                n = len(df)
+                # Choix des observations
+                pos1 = np.random.choice(np.arange(n),int(np.ceil(n*samples_percent)))
+                pos2 = np.random.choice(np.arange(n),int(np.ceil(n*samples_percent)))
+                df1 = df.iloc[pos1]
+                df2 = df.iloc[pos2]
+                x1 = df1[cc]
+                y1 = df1[colname]
+                x2 = df2[cc]
+                y2 = df2[colname]
+                x1.index = range(i0,i0+len(x1))
+                y1.index = range(i0,i0+len(x1))
+                x2.index = range(i0,i0+len(x1))
+                y2.index = range(i0,i0+len(x1))
+                i0 = i0+len(x1)
+                Y1.append(y1)
+                X1.append(x1)
+                Y2.append(y2)
+                X2.append(x2)
+            dfx1 = pd.concat(X1)
+            dfy1 = pd.concat(Y1)
+            dfx2 = pd.concat(X2)
+            dfy2 = pd.concat(Y2)
+
+            # Création du modèle.
+            reg = linear_model.LinearRegression()
+            reg = reg.fit(dfx1,dfy1)
+            r2 = reg.score(dfx2,dfy2)
+            reg_pop[i] = (reg,cc,r2)
+
+        r2 = np.array([reg_pop[i][2] for i in reg_pop])
+        ind = r2.argsort()[-keep_best_number:]
+        keeping = [reg_pop[i] for i in ind]
+        return keeping
+        
+        
     def fit(self, progress_bar=None, message_label=None):
         """ Apprentissage d'un modèle."""
         
         if len(self) == 0:
             raise OpsetError(self.storename,"No data")
         
-        sigpos = self.sigpos
-        
-        # ----------- Fabrication des données d'apprentissage -------------
-        def find_best_parameters(p,colname,cols):
-            X = []
-            Y = []
-            i0 = 0
-            for df in self:
-                n = len(df)
-                pos = np.random.choice(np.arange(n),int(np.ceil(n*p)))
-                df1 = df.iloc[pos]
-                x = df1[cols]
-                y = df1[colname]
-                x.index = range(i0,i0+len(x))
-                y.index = range(i0,i0+len(x))
-                i0 = i0+len(x)
-                Y.append(y)
-                X.append(x)
-            dfx = pd.concat(X)
-            dfy = pd.concat(Y)
+        sigpos = self.sigpos 
 
-            # Création du modèle.
-            reg = linear_model.LinearRegression()
-            reg = reg.fit(dfx,dfy)
-
-            return reg
-        # ------------------ Fin de l'optimisation ------------------------
-        
-        p = self.learn_params['samples_percent']
-        
-        columns = self.df.columns
+        if progress_bar:
+            retry_number = self.learn_params['retry_number']
+            progress_bar.max = len(self.variables)*retry_number
+            progress_bar.value = 0
         for colname in self.variables:
-            cols = [c for c in columns if c != colname]
-            reg = find_best_parameters(p,colname,cols)
-            self._reg[colname] = reg
-        
+            if message_label:
+                message_label.value = "Working on target " + colname + " ..."
+            self._reg[colname] = self.build_tube(colname, progress_bar=progress_bar)
+            
+        if progress_bar:
+            progress_bar.value = 0
+        if message_label:
+            message_label.value = ""
         return self.rewind(sigpos)
     
     
@@ -204,11 +252,16 @@ class Tube(Opset):
             z.fill(np.nan)
         
         else:
-            cols = [c for c in df.columns if c != colname]
-        
-            x = df[cols]
-            z = self._reg[colname].predict(x)
-        
+            Z = np.array([])
+            reg_list = self._reg[colname]
+            Z = np.ndarray((0,len(df)))
+            for reg, cols, r2 in reg_list:
+                x = df[cols]
+                z = reg.predict(x)
+                Z = np.vstack((Z,z))
+            z = Z.mean(axis=0)
+            zmax = Z.max(axis=0)
+            zmin = Z.min(axis=0)
         return z
     
     # ====================== Affichages ===========================                              
@@ -253,16 +306,36 @@ class Tube(Opset):
         # --------- Liste de sélection des variables à prédire ------------
         wlmv = widgets.SelectMultiple(options = self.df.columns,
                                       value = tuple(self.variables),
-                                      description = 'To learn',
+                                      description = 'Targets',
                                       rows=8,
-                                      disabled = False)
+                                      disabled = False,
+                                      layout=widgets.Layout(width='250px'))
 
-        def update_variable(*args):
+        def auto_update_variable(*args):
             self.variables.add(e['variable_dropdown'].value)
             wlmv.value = tuple(self.variables)
+        
+        def update_variables(*args):
+            self.variables = set(wlmv.value)
             
         e['variable_selection'] = wlmv
-        e['variable_dropdown'].observe(update_variable,'value')
+        e['variable_dropdown'].observe(auto_update_variable,'value')
+        wlmv.observe(update_variables,'value')
+        # -------- Fin de liste ---------
+        
+         # -------- Liste de sélection des facteurs de prdiction ----------
+        wlmf = widgets.SelectMultiple(options = self.df.columns,
+                                      value = tuple(self.factors),
+                                      description = 'Factors ',
+                                      rows=8,
+                                      disabled = False,
+                                      layout=widgets.Layout(width='250px'))
+
+        def update_factors(*args):
+            self.factors = set(wlmf.value)
+        
+        e['factor_selection'] = wlmf
+        wlmf.observe(update_factors,'value')
         # -------- Fin de liste ---------
         
         # =================================================================
@@ -309,6 +382,47 @@ class Tube(Opset):
         return e
 
     
+    def param(self):
+        """ Interface de paramétrage.
+        
+            Cette fonction affiche dans une cellule de dialogue les paramètres
+            courants et offre la possibilité de les modifier graphiquement.
+        """
+        
+        def update_parameters(retry, keep, sample, features):
+            
+            self.learn_params['retry_number'] = retry 
+            self.learn_params['keep_best_number'] = keep
+            self.learn_params['samples_percent'] = sample 
+            self.learn_params['max_features'] = features
+          
+        # =================================================================
+        # Widgets pour les indicateurs.
+        wtrn = widgets.IntText(description = "Retry number", 
+                               value = self.learn_params['retry_number'],
+                               layout=widgets.Layout(width='250px'))
+        wtkb = widgets.IntText(description = "Final population", 
+                               value = self.learn_params['keep_best_number'],
+                               layout=widgets.Layout(width='250px'))
+        wtsp = widgets.FloatText(description = "Sample percentage", 
+                                 value = self.learn_params['samples_percent'],
+                                 layout=widgets.Layout(width='250px'))
+        wtmf = widgets.IntText(description = "Maximum features", 
+                               value = self.learn_params['max_features'],
+                               layout=widgets.Layout(width='250px'))
+        
+
+        fbox = widgets.VBox([widgets.Label("Learning parameters (.learn_params):"),
+                             widgets.HBox([wtrn, wtkb]),
+                             widgets.HBox([wtsp, wtmf])])
+
+        out = widgets.interactive(update_parameters,
+                                  retry=wtrn, keep=wtkb,
+                                  sample=wtsp, features=wtmf)
+        
+        return fbox
+        
+    
     def plot(self,phase=None,pos=None,name=None):
         """ On ajoute à l'affichage de l'Opset une sélection d'instants."""
         f = make_subplots(rows=1, cols=1,
@@ -326,13 +440,19 @@ class Tube(Opset):
             ])
         
         bxlearn = widgets.VBox([e['progress_bar'], 
-                                widgets.HBox([e['variable_selection'], 
-                                              widgets.VBox([e['message_label'],
-                                                            e['learn_button']])])])
+                                widgets.HBox([widgets.VBox([e['variable_selection'],
+                                                            e['learn_button']]),
+                                              widgets.VBox([e['factor_selection'],
+                                                            e['message_label']])
+                                             ])
+                               ])
         
-        tabs = widgets.Tab(children = [bxplot, bxlearn])
+        bxparam = self.param()
+        
+        tabs = widgets.Tab(children = [bxplot, bxparam, bxlearn])
         tabs.set_title(0, "Plot")
-        tabs.set_title(1, "Learn")
+        tabs.set_title(1, "Param")
+        tabs.set_title(2, "Learn")
         return tabs
 
     
