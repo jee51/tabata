@@ -177,7 +177,8 @@ class Tube(Opset):
                 n = len(df)
                 # Choix des observations
                 pos1 = np.random.choice(np.arange(n),int(np.ceil(n*samples_percent)))
-                pos2 = np.random.choice(np.arange(n),int(np.ceil(n*samples_percent)))
+                #pos2 = np.random.choice(np.arange(n),int(np.ceil(n*samples_percent)))
+                pos2 = np.delete(np.arange(n),pos1)
                 df1 = df.iloc[pos1]
                 df2 = df.iloc[pos2]
                 x1 = df1[cc]
@@ -186,8 +187,8 @@ class Tube(Opset):
                 y2 = df2[colname]
                 x1.index = range(i0,i0+len(x1))
                 y1.index = range(i0,i0+len(x1))
-                x2.index = range(i0,i0+len(x1))
-                y2.index = range(i0,i0+len(x1))
+                x2.index = range(i0,i0+len(x2))
+                y2.index = range(i0,i0+len(x2))
                 i0 = i0+len(x1)
                 Y1.append(y1)
                 X1.append(x1)
@@ -202,12 +203,15 @@ class Tube(Opset):
             reg = linear_model.LinearRegression()
             reg = reg.fit(dfx1,dfy1)
             r2 = reg.score(dfx2,dfy2)
-            reg_pop[i] = (reg,cc,r2)
+            if i<keep_best_number:
+                reg_pop[i] = (reg,cc,r2)
+            else:
+                R2 = np.array([reg_pop[i][2] for i in reg_pop])
+                ind = R2.argsort()
+                if r2>R2[ind[0]]:
+                    reg_pop[ind[0]] = (reg,cc,r2)
 
-        r2 = np.array([reg_pop[i][2] for i in reg_pop])
-        ind = r2.argsort()[-keep_best_number:]
-        keeping = [reg_pop[i] for i in ind]
-        return keeping
+        return reg_pop.values()
         
         
     def fit(self, progress_bar=None, message_label=None):
@@ -250,6 +254,7 @@ class Tube(Opset):
             y = df[colname].values
             z = np.zeros(y.shape)
             z.fill(np.nan)
+            zmin = zmax = z
         
         else:
             Z = np.array([])
@@ -262,7 +267,10 @@ class Tube(Opset):
             z = Z.mean(axis=0)
             zmax = Z.max(axis=0)
             zmin = Z.min(axis=0)
-        return z
+            zmin = z-10*(z-zmin)
+            zmax = z+10*(zmax-z)
+            
+        return z,zmin,zmax
     
     # ====================== Affichages ===========================                              
     def make_figure(self,f,phase=None,pos=None,name=None):
@@ -279,12 +287,33 @@ class Tube(Opset):
         old_update = e['update_function']
         
         # Affichage de la proba de présence
-        z = self.estimate()
+        z,zmin,zmax = self.estimate()
         f.add_trace(go.Scatter(x=self.df.index, y=z, opacity=0.7,
                                name='pred',
-                               line=dict(color='darkgreen', 
-                                         width=2)), 
-                    row=1, col=1)       
+                               line=dict(color='darkgreen',
+                                         dash='dot',
+                                         width=1)), 
+                    row=1, col=1)
+        f.add_trace(go.Scatter(x=self.df.index, y=zmin, opacity=0.7,
+                               name='tubemin',
+                               stackgroup='tube',
+                               fill = 'none',
+                               #fill='toself',
+                               #fillcolor='rgba(0,180,0,0.5)',
+                               line=dict(color='green', 
+                                         width=0)), 
+                    row=1, col=1)
+        f.add_trace(go.Scatter(x=self.df.index, y=zmax-zmin, opacity=0.7,
+                               name='tubemax',
+                               stackgroup='tube',
+                               #fill='toself',
+                               fillcolor='rgba(0,180,0,0.5)',
+                               line=dict(color='green', 
+                                         width=0)), 
+                    row=1, col=1)
+        z0 = zmin.min()
+        z1 = zmax.max()
+        f.update_yaxes(range=(z0-0.1*(z1-z0),z1+0.1*(z1-z0)))
             
         # ---- Begin: Callback Interactive  ----
         def update_plot(colname, sigpos):
@@ -292,12 +321,21 @@ class Tube(Opset):
             """
             old_update(colname,sigpos) # met à jour les positions.
             
-            #self.variables.add(self.colname)
-            z = self.estimate()
+            z,zmin,zmax = self.estimate()
             f.update_traces(selector=dict(name='pred'),
                             x = self.df.index,
-                            y = z)            
+                            y = z)
+            f.update_traces(selector=dict(name='tubemin'),
+                            x = self.df.index,
+                            y = zmin)
+            f.update_traces(selector=dict(name='tubemax'),
+                            x = self.df.index,
+                            y = zmax-zmin)
+            z0 = zmin.min()
+            z1 = zmax.max()
+            f.update_yaxes(range=(z0-0.1*(z1-z0),z1+0.1*(z1-z0)))
         
+            
         # On remplace la fonction d'update (que l'on avait d'abord copiée).
         e['update_function'] = update_plot 
         # ---- End: Callback Interactive ----
@@ -438,6 +476,8 @@ class Tube(Opset):
                            e['previous_button'], e['next_button']]),
              widgets.HBox([f, e['signal_slider']])
             ])
+        # Pour info :
+        # f = tabs.children[0].children[1].children[0]
         
         bxlearn = widgets.VBox([e['progress_bar'], 
                                 widgets.HBox([widgets.VBox([e['variable_selection'],
