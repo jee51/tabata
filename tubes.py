@@ -152,13 +152,12 @@ class Tube(Opset):
         self.variables = set([self.df.columns[0]])
         self.factors = set(self.df.columns)
         self._reg = dict()
-        self._nqr = dict()
         self._sumlen = 0
         self.learn_params = dict(retry_number = 10,
                                  keep_best_number = 5,
                                  samples_percent = 0.01,
                                  max_features = 5)
-        self.tube_params = dict(tube_threshold = 0.01) 
+        self.tube_params = dict(tube_factor = 10.0) 
             
             
     def __repr__(self):
@@ -179,7 +178,7 @@ class Tube(Opset):
         
         reg_pop = dict()
         columns = self.factors
-        cols = [c for c in columns if c != colname]
+        cols = [c for c in columns if c != colname]+['TIME', 'MEAN']
         nbcols = len(cols)
          
         miss = 0
@@ -200,14 +199,19 @@ class Tube(Opset):
             i0 = 0
             for df in self:
                 n = len(df)
-                # Comptge des longueur.
+                if 'TIME' in cc:
+                    df['TIME'] = np.arange(n) # On rajoute le temps
+                if 'MEAN' in cc:
+                    df['MEAN'] = df[colname].mean()
                 if i==0:
-                    N += n
+                    N += n # Comptage des longueur.
+                    
                 # Choix des observations
                 pos1 = np.random.choice(np.arange(n),int(np.ceil(n*samples_percent)))
                 #pos2 = np.random.choice(np.arange(n),int(np.ceil(n*samples_percent)))
                 pos2 = np.delete(np.arange(n),pos1)
                 pos2 = np.random.choice(pos2,int(np.ceil(n*samples_percent)))
+                
                 df1 = df.iloc[pos1]
                 df2 = df.iloc[pos2]
                 x1 = df1[cc]
@@ -254,7 +258,13 @@ class Tube(Opset):
         
         
     def fit(self, progress_bar=None, message_label=None):
-        """ Apprentissage d'un modèle."""
+        """ Apprentissage d'un modèle.
+        
+            Le modèle est appris uniquement sur les variables et facteurs
+            sélectionnés.
+            
+            :return: le Tube appris.
+        """
         
         if len(self) == 0:
             raise OpsetError(self.storename,"No data")
@@ -271,58 +281,12 @@ class Tube(Opset):
             if message_label:
                 message_label.value = "Working on target " + colname + " ..."
             self._reg[colname] = self.build_tube(colname, progress_bar=progress_bar)
-            self._nqr[colname] = (1,1) # Initialisation.
-            
-        # Calcul des intervalles de confiance.
-        if progress_bar:
-            progress_bar.value += 1
-            if message_label:
-                message_label.value = "Computing exteme quantiles..."
-                
-        UD = dict()
-        keep = int(np.ceil(self.tube_params['tube_threshold']*self._sumlen))
-        for df in self:
-            for colname in self.variables:
-                y = df[colname].values
-                z,zmin,zmax = self.estimate()
-                ind = zmax>z
-                up = (y[ind]-z[ind])/(zmax[ind]-z[ind])
-                up = up[up>0]
-                up.sort()
-                if len(up)>keep:
-                    up = up[-keep:]
-                ind = z>zmin
-                dn = (z[ind]-y[ind])/(z[ind]-zmin[ind])
-                dn = dn[dn>0]
-                dn.sort()
-                if len(dn)>keep:
-                    dn = dn[-keep:]
-                if colname not in UD:
-                    UD[colname] = (up,dn)
-                else:
-                    up = np.hstack((UD[colname][0],up))
-                    up.sort()
-                    if len(up)>keep:
-                        up = up[-keep:]
-                    dn = np.hstack((UD[colname][1],dn))
-                    dn.sort()
-                    if len(dn)>keep:
-                        dn = dn[-keep:]
-                    UD[colname] = (up,dn)
-        
-        for colname in self.variables:
-            up, dn = UD[colname]
-            if len(up)==0: # on garde les tubes de base.
-                up = np.array([1])
-            if len(dn)==0:
-                dn = np.array([1])
-            self._nqr[colname] = (up[0],dn[0])
             
         if progress_bar:
             progress_bar.value = 0
         if message_label:
             message_label.value = ""
-        return UD #self.rewind(sigpos)
+        return self.rewind(sigpos)
     
     
     def estimate(self, name=None):
@@ -347,16 +311,21 @@ class Tube(Opset):
             Z = np.array([])
             reg_list = self._reg[colname]
             Z = np.ndarray((0,len(df)))
+            df['TIME'] = np.arange(len(df))
+            ymean = df[colname].mean()
+            df['MEAN'] = ymean
             for reg, cols, r2 in reg_list:
                 x = df[cols]
                 z = reg.predict(x)
                 Z = np.vstack((Z,z))
+            del df['MEAN']
+            del df['TIME']
             z = Z.mean(axis=0)
             zmax = Z.max(axis=0)
             zmin = Z.min(axis=0)
-            qmin,qmax = self._nqr[colname]
-            zmin = z-qmin*(z-zmin)
-            zmax = z+qmax*(zmax-z)
+            q = self.tube_params['tube_factor']
+            zmin = z-q*(z-zmin)
+            zmax = z+q*(zmax-z)
             
         return z,zmin,zmax
     
@@ -367,7 +336,8 @@ class Tube(Opset):
             :return: un DataFrame avec les cibles sur chaque ligne et les
                      facteurs en colonnes.
         """
-        desc = pd.DataFrame(0, columns=self.factors, index=self.variables)
+        desc = pd.DataFrame(0, columns=self.factors.union({'TIME','MEAN'}),
+                            index=self.variables)
         for colname in self._reg:
             reg_list = self._reg[colname]
             for reg,cc,r2 in reg_list:
@@ -539,13 +509,13 @@ class Tube(Opset):
             courants et offre la possibilité de les modifier graphiquement.
         """
         
-        def update_parameters(retry, keep, sample, features, threshold):
+        def update_parameters(retry, keep, sample, features, factor):
             
             self.learn_params['retry_number'] = retry 
             self.learn_params['keep_best_number'] = keep
             self.learn_params['samples_percent'] = sample 
             self.learn_params['max_features'] = features
-            self.tube_params['tupe_threshold'] = threshold
+            self.tube_params['tube_factor'] = factor
           
         # =================================================================
         # Widgets pour les indicateurs.
@@ -562,8 +532,8 @@ class Tube(Opset):
                                value = self.learn_params['max_features'],
                                layout=widgets.Layout(width='250px'))
         
-        wttt = widgets.FloatText(description = "Sample percentage", 
-                                 value = self.tube_params['tube_threshold'],
+        wttt = widgets.FloatText(description = "Tube size", 
+                                 value = self.tube_params['tube_factor'],
                                  layout=widgets.Layout(width='250px'))
 
         fbox = widgets.VBox([widgets.Label("Learning parameters (.learn_params):"),
@@ -576,7 +546,7 @@ class Tube(Opset):
         out = widgets.interactive(update_parameters,
                                   retry=wtrn, keep=wtkb,
                                   sample=wtsp, features=wtmf,
-                                  threshold=wttt)
+                                  factor=wttt)
         
         return fbox
         
