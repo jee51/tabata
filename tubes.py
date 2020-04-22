@@ -91,12 +91,27 @@ class OpTube(Opset):
         old_update = e['update_function']
         
         # Affichage de la proselfprésence
-        z = self.pred.rewind(self.sigpos).estimate(self.colname)
+        z,zmin,zmax = self.pred.rewind(self.sigpos).estimate(self.colname)
         f.add_trace(go.Scatter(x=self.pred.df.index, y=z, opacity=0.7,
                                name='pred',
                                line=dict(color='darkgreen', 
-                                         width=2)), 
-                    row=1, col=1)       
+                                         dash='dot',
+                                         width=1)), 
+                    row=1, col=1)
+        f.add_trace(go.Scatter(x=self.pred.df.index, y=zmin, opacity=0.7,
+                               name='tubemin',
+                               stackgroup='tube',
+                               fill = 'none',
+                               line=dict(color='green', 
+                                         width=0)), 
+                    row=1, col=1)
+        f.add_trace(go.Scatter(x=self.pred.df.index, y=zmax-zmin, opacity=0.7,
+                               name='tubemax',
+                               stackgroup='tube',
+                               fillcolor='rgba(0,180,0,0.5)',
+                               line=dict(color='green', 
+                                         width=0)), 
+                    row=1, col=1)
             
         # =================================================================
         # ---- Begin: Callback Interactive  ----
@@ -107,10 +122,16 @@ class OpTube(Opset):
             
             pred = self.pred.rewind(self.sigpos)
             print('Ask for', self.colname)
-            z = pred.estimate(self.colname)
+            z,zmin,zmax = pred.estimate(self.colname)
             f.update_traces(selector=dict(name='pred'),
                             x = pred.df.index,
-                            y = z)            
+                            y = z)
+            f.update_traces(selector=dict(name='tubemin'),
+                            x = self.pred.df.index,
+                            y = zmin)
+            f.update_traces(selector=dict(name='tubemax'),
+                            x = self.pred.df.index,
+                            y = zmax-zmin)
         # ---- End: Callback Interactive ----
 
         # On remplace la fonction d'update (que l'on avait d'abord copiée).
@@ -122,8 +143,6 @@ class OpTube(Opset):
 #%% Un affichage interactif permettant de visualiser le contenu de la liste.
 class Tube(Opset):
     """ L'Opset contenant les données à utiliser pour l'apprentissage.
-    
-    todo:: choisir les variables.
     """
     
     def __init__(self, storename, phase=None, pos=0, name=""):
@@ -133,17 +152,21 @@ class Tube(Opset):
         self.variables = set([self.df.columns[0]])
         self.factors = set(self.df.columns)
         self._reg = dict()
+        self._nqr = dict()
+        self._sumlen = 0
         self.learn_params = dict(retry_number = 10,
                                  keep_best_number = 5,
                                  samples_percent = 0.01,
-                                 max_features = 5) 
+                                 max_features = 5)
+        self.tube_params = dict(tube_threshold = 0.01) 
             
             
     def __repr__(self):
         """ Affiche le nombre de sélections."""
 
         return "{}\n" \
-               "TUBE : ...".format(Opset.__repr__(self))
+               "TUBE : on {} variables:".format(Opset.__repr__(self),
+                                                len(self.variables))
     
     
     def build_tube(self, colname, progress_bar=None):
@@ -158,7 +181,9 @@ class Tube(Opset):
         columns = self.factors
         cols = [c for c in columns if c != colname]
         nbcols = len(cols)
-            
+         
+        miss = 0
+        N = 0
         for i in range(retry_number):
             if progress_bar:
                 progress_bar.value += 1
@@ -175,10 +200,14 @@ class Tube(Opset):
             i0 = 0
             for df in self:
                 n = len(df)
+                # Comptge des longueur.
+                if i==0:
+                    N += n
                 # Choix des observations
                 pos1 = np.random.choice(np.arange(n),int(np.ceil(n*samples_percent)))
                 #pos2 = np.random.choice(np.arange(n),int(np.ceil(n*samples_percent)))
                 pos2 = np.delete(np.arange(n),pos1)
+                pos2 = np.random.choice(pos2,int(np.ceil(n*samples_percent)))
                 df1 = df.iloc[pos1]
                 df2 = df.iloc[pos2]
                 x1 = df1[cc]
@@ -194,11 +223,14 @@ class Tube(Opset):
                 X1.append(x1)
                 Y2.append(y2)
                 X2.append(x2)
+                
             dfx1 = pd.concat(X1)
             dfy1 = pd.concat(Y1)
             dfx2 = pd.concat(X2)
             dfy2 = pd.concat(Y2)
-
+            if i==0:
+                self._sumlen = N
+                
             # Création du modèle.
             reg = linear_model.LinearRegression()
             reg = reg.fit(dfx1,dfy1)
@@ -210,7 +242,14 @@ class Tube(Opset):
                 ind = R2.argsort()
                 if r2>R2[ind[0]]:
                     reg_pop[ind[0]] = (reg,cc,r2)
-
+                    miss = 0
+                else:
+                    miss += 1
+                    if miss==keep_best_number:
+                        if progress_bar:
+                            progress_bar.value += retry_number-i
+                        break
+        
         return reg_pop.values()
         
         
@@ -224,18 +263,66 @@ class Tube(Opset):
 
         if progress_bar:
             retry_number = self.learn_params['retry_number']
-            progress_bar.max = len(self.variables)*retry_number
+            progress_bar.max = len(self.variables)*retry_number+1
             progress_bar.value = 0
+            
+        # Création des régressions.
         for colname in self.variables:
             if message_label:
                 message_label.value = "Working on target " + colname + " ..."
             self._reg[colname] = self.build_tube(colname, progress_bar=progress_bar)
+            self._nqr[colname] = (1,1) # Initialisation.
+            
+        # Calcul des intervalles de confiance.
+        if progress_bar:
+            progress_bar.value += 1
+            if message_label:
+                message_label.value = "Computing exteme quantiles..."
+                
+        UD = dict()
+        keep = int(np.ceil(self.tube_params['tube_threshold']*self._sumlen))
+        for df in self:
+            for colname in self.variables:
+                y = df[colname].values
+                z,zmin,zmax = self.estimate()
+                ind = zmax>z
+                up = (y[ind]-z[ind])/(zmax[ind]-z[ind])
+                up = up[up>0]
+                up.sort()
+                if len(up)>keep:
+                    up = up[-keep:]
+                ind = z>zmin
+                dn = (z[ind]-y[ind])/(z[ind]-zmin[ind])
+                dn = dn[dn>0]
+                dn.sort()
+                if len(dn)>keep:
+                    dn = dn[-keep:]
+                if colname not in UD:
+                    UD[colname] = (up,dn)
+                else:
+                    up = np.hstack((UD[colname][0],up))
+                    up.sort()
+                    if len(up)>keep:
+                        up = up[-keep:]
+                    dn = np.hstack((UD[colname][1],dn))
+                    dn.sort()
+                    if len(dn)>keep:
+                        dn = dn[-keep:]
+                    UD[colname] = (up,dn)
+        
+        for colname in self.variables:
+            up, dn = UD[colname]
+            if len(up)==0: # on garde les tubes de base.
+                up = np.array([1])
+            if len(dn)==0:
+                dn = np.array([1])
+            self._nqr[colname] = (up[0],dn[0])
             
         if progress_bar:
             progress_bar.value = 0
         if message_label:
             message_label.value = ""
-        return self.rewind(sigpos)
+        return UD #self.rewind(sigpos)
     
     
     def estimate(self, name=None):
@@ -267,16 +354,41 @@ class Tube(Opset):
             z = Z.mean(axis=0)
             zmax = Z.max(axis=0)
             zmin = Z.min(axis=0)
-            zmin = z-10*(z-zmin)
-            zmax = z+10*(zmax-z)
+            qmin,qmax = self._nqr[colname]
+            zmin = z-qmin*(z-zmin)
+            zmax = z+qmax*(zmax-z)
             
         return z,zmin,zmax
+    
+    
+    def describe(self):
+        """ Description des estimations.
+        
+            :return: un DataFrame avec les cibles sur chaque ligne et les
+                     facteurs en colonnes.
+        """
+        desc = pd.DataFrame(0, columns=self.factors, index=self.variables)
+        for colname in self._reg:
+            reg_list = self._reg[colname]
+            for reg,cc,r2 in reg_list:
+                for c in cc:
+                    desc[c].loc[colname] += 1
+        desc.index.name = "Regresions"
+        return desc
+        
+            
     
     # ====================== Affichages ===========================                              
     def make_figure(self,f,phase=None,pos=None,name=None):
         """ Création de l'interface graphique.
         
+            Un tube est ajouté autour des données. Une ligne pointillée 
+            verte dans le tube correspond à l'estimation.
             
+            todo::  améliorer la gestion du 'range' de la figure qui est 
+                    altérée car il est difficile de créer le tube sans 
+                    utiliser un stackgroup. Une solution serait de
+                    transformer l'index et de faire une boucle 'toself'.
         """
 
         # Récupération de l'interface de l'Opset.
@@ -427,12 +539,13 @@ class Tube(Opset):
             courants et offre la possibilité de les modifier graphiquement.
         """
         
-        def update_parameters(retry, keep, sample, features):
+        def update_parameters(retry, keep, sample, features, threshold):
             
             self.learn_params['retry_number'] = retry 
             self.learn_params['keep_best_number'] = keep
             self.learn_params['samples_percent'] = sample 
             self.learn_params['max_features'] = features
+            self.tube_params['tupe_threshold'] = threshold
           
         # =================================================================
         # Widgets pour les indicateurs.
@@ -449,14 +562,21 @@ class Tube(Opset):
                                value = self.learn_params['max_features'],
                                layout=widgets.Layout(width='250px'))
         
+        wttt = widgets.FloatText(description = "Sample percentage", 
+                                 value = self.tube_params['tube_threshold'],
+                                 layout=widgets.Layout(width='250px'))
 
         fbox = widgets.VBox([widgets.Label("Learning parameters (.learn_params):"),
                              widgets.HBox([wtrn, wtkb]),
-                             widgets.HBox([wtsp, wtmf])])
+                             widgets.HBox([wtsp, wtmf]),
+                             widgets.Label("Tube parameters (.tube_params:)"),
+                             wttt
+                            ])
 
         out = widgets.interactive(update_parameters,
                                   retry=wtrn, keep=wtkb,
-                                  sample=wtsp, features=wtmf)
+                                  sample=wtsp, features=wtmf,
+                                  threshold=wttt)
         
         return fbox
         
