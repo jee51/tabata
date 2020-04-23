@@ -69,7 +69,7 @@ def highlight(origin,extract,filename=None):
     
 ###########################################################################
 #%% Un affichage interactif permettant de visualiser le contenu de la liste.
-class OpTube(Opset):
+class AppTube(Opset):
     """ L'Opset contenant les données à utiliser pour l'apprentissage.
     """
     
@@ -157,14 +157,17 @@ class Tube(Opset):
                                  keep_best_number = 5,
                                  samples_percent = 0.01,
                                  max_features = 5)
-        self.tube_params = dict(tube_factor = 10.0) 
+        self.feature_params = dict(local_value='Absolute',
+                                   use_time='No')
+        self.tube_params = dict(tube_factor = 10.0,
+                                filter_width = 20) 
             
             
     def __repr__(self):
         """ Affiche le nombre de sélections."""
 
         return "{}\n" \
-               "TUBE : on {} variables:".format(Opset.__repr__(self),
+               "TUBE : on {} variables.".format(Opset.__repr__(self),
                                                 len(self.variables))
     
     
@@ -178,7 +181,13 @@ class Tube(Opset):
         
         reg_pop = dict()
         columns = self.factors
-        cols = [c for c in columns if c != colname]+['TIME', 'MEAN']
+        cols = [c for c in columns if c != colname]
+        if self.feature_params['use_time'] == 'Yes':
+            cols += ['TIME']
+        if self.feature_params['local_value'] == 'Median':
+            cols += ['MEDIAN']
+        if self.feature_params['local_value'] == 'Causal':
+            cols += ['CAUSAL']
         nbcols = len(cols)
          
         miss = 0
@@ -201,8 +210,10 @@ class Tube(Opset):
                 n = len(df)
                 if 'TIME' in cc:
                     df['TIME'] = np.arange(n) # On rajoute le temps
-                if 'MEAN' in cc:
-                    df['MEAN'] = df[colname].mean()
+                if 'MEDIAN' in cc:
+                    df['MEDIAN'] = df[colname].median()
+                if 'CAUSAL' in cc:
+                    df['CAUSAL'] = df[colname][0]
                 if i==0:
                     N += n # Comptage des longueur.
                     
@@ -312,21 +323,33 @@ class Tube(Opset):
             reg_list = self._reg[colname]
             Z = np.ndarray((0,len(df)))
             df['TIME'] = np.arange(len(df))
-            ymean = df[colname].mean()
-            df['MEAN'] = ymean
+            df['MEDIAN'] = df[colname].median()
+            df['CAUSAL'] = df[colname][0]
             for reg, cols, r2 in reg_list:
                 x = df[cols]
                 z = reg.predict(x)
                 Z = np.vstack((Z,z))
-            del df['MEAN']
+            del df['CAUSAL']
+            del df['MEDIAN']
             del df['TIME']
             z = Z.mean(axis=0)
             zmax = Z.max(axis=0)
             zmin = Z.min(axis=0)
             q = self.tube_params['tube_factor']
-            zmin = z-q*(z-zmin)
-            zmax = z+q*(zmax-z)
-            
+            w = self.tube_params['filter_width']
+            if w>0:
+                zmin = signal.savgol_filter(z-q*(z-zmin),
+                                        window_length=2*w+1,
+                                        polyorder=2,
+                                        deriv=0)
+                zmax = signal.savgol_filter(z+q*(zmax-z),
+                                        window_length=2*w+1,
+                                        polyorder=2,
+                                        deriv=0)
+            else:
+                zmin = z-q*(z-zmin)
+                zmax = z+q*(zmax-z)
+                
         return z,zmin,zmax
     
     
@@ -336,8 +359,8 @@ class Tube(Opset):
             :return: un DataFrame avec les cibles sur chaque ligne et les
                      facteurs en colonnes.
         """
-        desc = pd.DataFrame(0, columns=self.factors.union({'TIME','MEAN'}),
-                            index=self.variables)
+        desc = pd.DataFrame(0, columns=list(self.df.columns)+['TIME','MEDIAN','CAUSAL'],
+                            index=list(self._reg.keys()))
         for colname in self._reg:
             reg_list = self._reg[colname]
             for reg,cc,r2 in reg_list:
@@ -346,9 +369,56 @@ class Tube(Opset):
         desc.index.name = "Regresions"
         return desc
         
+     # ============================= Scores ===============================
+    def local_scores(self):
+        """ Renvoie les scores de toutes les variables du signal courant."""
+        
+        scr = pd.DataFrame(0, index=[self.current_record()],
+                           columns=["N"]+list(self._reg.keys()))
+        
+        scr["N"][self.current_record()] = len(self.df)
+        for colname in self._reg:
+            z, zmin, zmax = self.estimate(colname)
+            y = self.df[colname].values
+            s = sum(y>zmax)+sum(y<zmin)
+            scr[colname][self.current_record()] = s
             
+        return scr
     
-    # ====================== Affichages ===========================                              
+    
+    def scores(self):
+        """ Renvoie le score global du signal courant."""
+        
+        scr = pd.DataFrame(0, index=self.records,
+                           columns=["N"]+list(self._reg.keys()))
+        
+        for df in self:
+            scr["N"][self.current_record()] = len(df)
+            for colname in self._reg:
+                z, zmin, zmax = self.estimate(colname)
+                y = self.df[colname].values
+                s = sum(y>zmax)+sum(y<zmin)
+                scr[colname][self.current_record()] = s
+
+        return scr
+    
+    
+    def plot_scores(self):
+        """ Affichage des scores."""
+
+        scr = self.scores()
+        f = go.Figure()
+        for colname in scr.columns[1:]:
+            f.add_trace(go.Bar(name = colname, 
+                               x = scr.index, 
+                               y = scr[colname]/scr["N"]))
+        f.update_layout(barmode='stack',
+                        title="Out of tube proportions")
+ 
+        return f
+
+    
+    # ========================== Affichages ===============================
     def make_figure(self,f,phase=None,pos=None,name=None):
         """ Création de l'interface graphique.
         
@@ -509,13 +579,16 @@ class Tube(Opset):
             courants et offre la possibilité de les modifier graphiquement.
         """
         
-        def update_parameters(retry, keep, sample, features, factor):
+        def update_parameters(retry, keep, sample, features, factor, width, localv, utime):
             
             self.learn_params['retry_number'] = retry 
             self.learn_params['keep_best_number'] = keep
             self.learn_params['samples_percent'] = sample 
             self.learn_params['max_features'] = features
             self.tube_params['tube_factor'] = factor
+            self.tube_params['filter_width'] = width
+            self.feature_params['local_value'] = localv
+            self.feature_params['use_time'] = utime
           
         # =================================================================
         # Widgets pour les indicateurs.
@@ -532,21 +605,40 @@ class Tube(Opset):
                                value = self.learn_params['max_features'],
                                layout=widgets.Layout(width='250px'))
         
+        # Widgets pour les caractéristiques spéciales.
+        wsmc = widgets.Select(options=['Absolute', 'Median', 'Causal'],
+                              value=self.feature_params['local_value'],
+                              description='Local value',
+                              rows=3,
+                              layout=widgets.Layout(width='250px'))
+        wsmt = widgets.Select(options=['Yes', 'No'],
+                              value=self.feature_params['use_time'],
+                              description='Use time',
+                              rows=2,
+                              layout=widgets.Layout(width='250px'))
+
+        # Widgets pour les tubes.
         wttt = widgets.FloatText(description = "Tube size", 
                                  value = self.tube_params['tube_factor'],
+                                 layout=widgets.Layout(width='250px'))
+        wttw = widgets.IntText(description = "Filter width", 
+                                 value = self.tube_params['filter_width'],
                                  layout=widgets.Layout(width='250px'))
 
         fbox = widgets.VBox([widgets.Label("Learning parameters (.learn_params):"),
                              widgets.HBox([wtrn, wtkb]),
                              widgets.HBox([wtsp, wtmf]),
+                             widgets.Label("Feature parameters (.feature_params):"),
+                             widgets.HBox([wsmc, wsmt]),
                              widgets.Label("Tube parameters (.tube_params:)"),
-                             wttt
+                             widgets.HBox([wttt, wttw])
                             ])
 
         out = widgets.interactive(update_parameters,
                                   retry=wtrn, keep=wtkb,
                                   sample=wtsp, features=wtmf,
-                                  factor=wttt)
+                                  factor=wttt, width=wttw,
+                                  localv=wsmc, utime=wsmt)
         
         return fbox
         
