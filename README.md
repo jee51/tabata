@@ -46,6 +46,6 @@ Le sous-package `Tubes` gère les opérations de scoring et de détection de sig
 - [x] Affichages de signaux - Les signaux sont affichés dans des notebooks avec une interactivité permettant de sélectionner les variables ou les enregistrements.
 - [x] Un objet `Sélector` dérive de l'Opset, il permet de sélectionner interactivement des points d'intérêt sur un ou plusieurs signaux et génère un code permettant de retrouver ce point d'intérêt automatiquement. 
 - [x] L'objet `Selector` permet aussi d'extraire une partie d'un signal à gauche ou a droite du point d'intéret ou entre deux instants.
-- [ ] Un objet Tube permet de générer des tubes de confiance autour d'une ou plusieurs courbes.
+- [x] Un objet Tube permet de générer des tubes de confiance autour d'une ou plusieurs courbes.
  
-
+Les tubes sont encore très rudimentaires, il reste à faire notamment une estimation des bornes statistiquement robuste à partir de valeurs extrêmes et pouvoir transférer un miodèle de tube sur un signal qui n'a pas servi à l'apprentissage. Je mets la plupart de ces choses "à faire" dans les _issues_.
