@@ -6,8 +6,6 @@ Chaque observation est un dataFrame pandas. Elle est nommée, le nom de l'enregi
 est stocké dans la liste mais aussi comme nom de l'index temporel ce qui facilite
 la recherche.
 
-* Les noms de variables sont composées d'un nom suivi de l'unité entre crochets "[]".
-* La fonction auxiliaire `nameunit()` décompose le nom d'une variable.
 * L'itérateur `iterator()` renvoie un itérateur sur les observations du fichier HDF5.
 * L'indexation de l'Opset renvoie un DataFrame, et il est plus simple d'itérer sur un slice.
 * L'Opset est une classe permettant de visualiser interactivement le contenu.
@@ -16,6 +14,7 @@ la recherche.
 
 1.0.3 - Algorithmes d'instants.
 1.0.4 - Indextion négative et itération avec retour à l'origine.
+1.0.5 - Réintégration des plots de DataFrames dans plots.py.
 
 
 Created on Wed May  9 16:50:34 2018
@@ -23,8 +22,8 @@ Created on Wed May  9 16:50:34 2018
 @author: Jérôme Lacaille
 """
 
-__date__ = "2020-04-11"
-__version__ = '1.0.4'
+__date__ = "2020-05-10"
+__version__ = '1.0.5'
 
 import os
 import numpy as np
@@ -32,6 +31,8 @@ import pandas as pd
 import ipywidgets as widgets
 import plotly.graph_objs as go
 from plotly.subplots import make_subplots
+
+from .plots import nameunit, get_colname
 
 ###########################################################################
 class OpsetError(ValueError):
@@ -44,143 +45,6 @@ class OpsetError(ValueError):
     {self.message}""".format(self=self)
     
     
-###########################################################################
-#%% Fonctions auxiliaires.
-def nameunit(col,sep="["):
-    """ Renvoie le nom et l'unité d'une variable au format NOM[UNITE]"""
-    i = col.find(sep)
-    if i == -1:
-        return col,'-'
-    return col[:i],col[i+1:-1]
-
-
-def byunits(cols,sep="["):
-    """ Récupère un dictionnaire dont les clés sont les unités uniques et
-        les valeurs les colonnes correspondates.
-    """
-    dnu = dict()
-    for col in cols:
-        name,unit = nameunit(col,sep)
-        if unit in dnu:
-            dnu[unit].append(col)
-        else:
-            dnu[unit] = [col]
-    return dnu
-
-
-def get_colname(columns,variable,default=0):
-    """ Récupère le nom complet de la variable.
-    
-        :param columns:  La liste des retours possibles.
-        :param variable: Le début du nom rechercé dans la liste.
-        :param default:  Un moyen de différentier si on veut une valeur 
-                            ou rien quand rien n'est trouvé.
-                            
-        Par défaut la fonction renvoie la première donnée.
-        En posant `Default=None` une entrée vide renvoie le vide.
-    """
-    
-    if default is not None and isinstance(default,int):
-        default = columns[default]
-    if not variable:
-        return default
-    
-    subs = [r for r in columns if variable in r]
-    if len(subs) > 0:
-        variable = subs[0]
-    else:
-        variable = default
-
-    return variable
-
-
-###########################################################################
-#%% Fonctions d'affichage de signaux.
-def selplot(df, variable=None):
-    """ Affiche un signal parmis la liste des signaux disponibles.
-
-        :param df:       la table de données.
-        :param variable: une variable à afficher au lieu de la première
-                            colonne de la table.
-    """
-
-    def selected_plot(col):
-        """ La fonction d'interactivité de `selplot`.
-        
-            C'est cette fonction qui définit notamment le style du titre et des axes.
-        """
-        name, unit = nameunit(col)
-        data = [go.Scatter(x=df.index, y=df[col])]
-        layout = go.Layout(title=name,
-                           titlefont={'color': "blue"},
-                           xaxis={'title': df.index.name,
-                                  'titlefont': {'color': "blue"}},
-                           yaxis={'title': unit,
-                                  'titlefont': {'color': "blue"}})
-        fig = go.Figure(data=data, layout=layout)
-        fig.show()
-
-    variable = get_colname(list(df.columns),variable)
-    wd = widgets.Dropdown(options=df.columns, value=variable, description="Variable :")
-    widgets.interact(selected_plot, col=wd)
-
-
-def byunitplot(df, yunit=None, xunit="date", title=""):
-    """ Affiche les signaux en fonction de leur unité.
-
-        Au début l'affichage est vide et une question est posée '?',
-        en choisissant une unité on affiche toutes les courbes correspondant.
-        On peut aussi sélectionner quelques courbes en cliquant sur les légendes.
-        Un racourci permet de n'afficher qu'une seule courbe.
-
-        :param df:    la table de données.
-        :param title: un titre à la figure.
-        :param xunit: l'unité de date.
-        :param yunit: l'unité des observations.
-    """
-    dnu = byunits(df)
-    units = list(dnu.keys())
-
-    def unit_plot(unit, variable='All'):
-        """ Fonction d'interactivité des gadgets."""
-        if unit not in dnu:
-            return
-        if variable == 'All' or variable is None:
-            cols = dnu[unit]
-            data = [go.Scatter(x=df.index, y=df[col], name=nameunit(col)[0])
-                    for col in cols]
-        else:
-            print(variable)
-            data = [go.Scatter(x=df.index, y=df[variable],
-                               name=nameunit(variable)[0])]
-        layout = go.Layout(title=title,
-                           titlefont={'color': "blue"},
-                           xaxis={'title': xunit,
-                                  'titlefont': {'color': "blue"}},
-                           yaxis={'title': unit,
-                                  'titlefont': {'color': "blue"}},
-                           showlegend=True)
-        fig = go.Figure(data=data, layout=layout)
-        fig.show()
-
-    def update_variables(*args):
-        """ Fonction de mise à jour des listes déroulantes."""
-        wv.options = ['All'] + dnu[wu.value]
-        wv.value = 'All'
-
-    if (yunit is None) or (yunit not in units):
-        yunit = units[0]
-    wu = widgets.Dropdown(options=units, value=yunit, description="Unité :")
-    wv = widgets.Dropdown(options=['All']+dnu[units[0]], 
-                          value='All', description="Variables :")
-    #wu = widgets.Dropdown(options=["?"] + units, description="Unité :")
-    #wv = widgets.Dropdown(options=['?'], description="Variables :")
-    wu.layout = widgets.Layout(width='30%')
-    wu.observe(update_variables, 'value')
-    b = widgets.HBox([wu, wv])
-    out = widgets.interactive_output(unit_plot, dict(unit=wu, variable=wv))
-    return widgets.VBox([b,out])
-
 
 ###########################################################################
 #%% Un affichage interactif permettant de visualiser le contenu de la liste.
@@ -335,16 +199,6 @@ class Opset:
     
     def __iter__(self):
         return self.iterator()
-#        self._tmppos = self.sigpos
-#        self.rewind()
-#        self.sigpos = -1 # Juste pour l'itération.
-#        return self
-    
-#    def __next__(self):
-#        if self.sigpos+1 == len(self.records):
-#            self[self._tmppos]
-#            raise StopIteration
-#        return self[self.sigpos+1]
     
     def current_record(self):
         """ Renvoie le nom de l'enregistrement courant."""

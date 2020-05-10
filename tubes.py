@@ -10,6 +10,7 @@ de prédiction sur d'autres données.
 
 1.0.1 - Création.
 1.0.2 - Tabs pour l'apprentissage.
+1.0.3 - Utilisation de super()
 
 
 todo::
@@ -20,8 +21,8 @@ Created on Mon April 13 12:04:00 2020
 @author: Jérôme Lacaille
 """
 
-__date__ = "2020-04-18"
-__version__ = '1.0.2'
+__date__ = "2020-05-10"
+__version__ = '1.0.3'
 
 import os
 import numpy as np
@@ -31,7 +32,9 @@ import plotly.graph_objs as go
 from plotly.subplots import make_subplots
 from scipy import signal
 from sklearn import linear_model
-from tabata.opset import Opset, nameunit, get_colname, OpsetError
+
+from .opset import Opset, OpsetError
+from.plots import nameunit, get_colname
 
 ###########################################################################
 #%% Fonctions auxiliaires.
@@ -75,8 +78,8 @@ class AppTube(Opset):
     
     def __init__(self, origin, pred):
         """ Initialise les listes d'instants et d'opération."""
-        Opset.__init__(self, origin.storename, 
-                       origin.phase, origin.sigpos, origin.colname)
+        super().__init__(origin.storename, 
+                         origin.phase, origin.sigpos, origin.colname)
         
         self.pred = pred            
             
@@ -147,7 +150,7 @@ class Tube(Opset):
     
     def __init__(self, storename, phase=None, pos=0, name=""):
         """ Initialise les listes d'instants et d'opération."""
-        Opset.__init__(self, storename, phase, pos, name)
+        super().__init__(storename, phase, pos, name)
         
         self.variables = set([self.df.columns[0]])
         self.factors = set(self.df.columns)

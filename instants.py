@@ -13,6 +13,7 @@ Des fonctions de gestion de l'extracteur d'instants.
         Réinstallation du pointeur après extraction.
 1.0.7 - Tabs pour l'apprentissage
 1.0.8 - Limitation des indicateurs si l'isntant est proche d'un bord.
+1.0.9 - Appel de super()
 
 
 todo::
@@ -24,8 +25,8 @@ Created on Fri March 27 19:27:00 2020
 @author: Jérôme Lacaille
 """
 
-__date__ = "2020-04-18"
-__version__ = '1.0.8'
+__date__ = "2020-05-10"
+__version__ = '1.0.9'
 
 import os
 import numpy as np
@@ -35,7 +36,8 @@ import plotly.graph_objs as go
 from plotly.subplots import make_subplots
 from scipy import signal
 from sklearn import tree
-from tabata.opset import Opset, nameunit, OpsetError
+from .opset import Opset, OpsetError
+from .plots import nameunit
 
 
 ###########################################################################
@@ -158,7 +160,7 @@ class Selector(Opset):
 
     def __init__(self, storename, phase=None, pos=0, name=""):
         """ Initialise les listes d'instants et d'opération."""
-        Opset.__init__(self, storename, phase, pos, name)
+        super().__init__(storename, phase, pos, name)
         self.selected = dict()
         self.viewed = set()
         self.variables = set()
