@@ -15,6 +15,8 @@ __version__ = '1.0.0'
 import os
 import numpy as np
 import pandas as pd
+from sklearn.preprocessing import StandardScaler
+from sklearn.decomposition import PCA
 import ipywidgets as widgets
 import plotly.graph_objs as go
 from plotly.subplots import make_subplots
@@ -149,7 +151,9 @@ def byunitplot(df, yunit=None, title=""):
                           value='All', description="Variables :")
  
     wu.observe(update_variables, 'value')
-    widgets.interact(unit_plot, unit=wu, variable=wv)
+    out = widgets.interactive_output(unit_plot, dict(unit=wu, variable=wv))
+    boxes = widgets.VBox([widgets.HBox([wu,wv]),out])
+    return boxes
 
     
 def groupplot(df,title="",standardize=False):
@@ -237,5 +241,67 @@ def doubleplot(df1,df2=None,p=0.5,space=0.05,title=None):
     fig.show()
     
 ###########################################################################
+# Affichages analytiques.
+
+def pcacircle(df,pca=None):
+    """ Construit le cercle descriptif des composantes d'un ACP.
+    
+        L'analyse en composante principale peut être directement 
+        passée en argument. Dans le cas contraire une analyse simple
+        est faite.
+    """
+    
+    if not pca:
+        X = StandardScaler().fit_transform(df.values)
+        pca = PCA().fit(X)
+
+    cnames = ["PC{} ({:.1f}%)".\
+              format(c,pca.explained_variance_ratio_[c-1]*100)
+              for c in range(1,pca.n_components_+1)]
+    
+    def update_circle(cname1,cname2):
+        
+        comp1 = cnames.index(cname1)
+        comp2 = cnames.index(cname2)
+
+        pc1 = pca.components_[comp1]
+        pc2 = pca.components_[comp2]
+
+        scalex = np.sqrt(pca.explained_variance_[comp1])
+        scaley = np.sqrt(pca.explained_variance_[comp2])
+
+        data = [go.Scatter(x = pc1*scalex, y = pc2*scaley, mode="markers+text",
+                           text=df.columns, textposition="top right",
+                           marker=dict(color="red", size=10), showlegend=False,
+                           hoverinfo='skip')]
+        data2 = [go.Scatter(x=[0,pc1[i]*scalex],y=[0,pc2[i]*scaley],mode="lines",
+                            line=dict(color="red",width=1,dash="dot"),
+                            showlegend=False) for i in range(0,df.shape[1])]
+
+        shapes=[go.layout.Shape(type="circle",
+                                xref="x",yref="y",
+                                x0=-1,y0=-1,x1=1,y1=1,
+                                line_color="LightBlue")]
+
+        total_variance2 = pca.explained_variance_ratio_[comp1] + \
+                          pca.explained_variance_ratio_[comp2]
+        layout = go.Layout(title="Projection dans le plan PC{}xPC{} ({:.1f}%)".\
+                          format(comp1,comp2,total_variance2*100),
+                          xaxis_title=cnames[comp1],
+                          yaxis_title=cnames[comp2],
+                          shapes=shapes,
+                          xaxis=dict(range=[-1,1]),
+                          yaxis=dict(range=[-1,1],scaleanchor="x",scaleratio=1))
+        fig = go.Figure(data+data2,layout)
+        fig.show()
+        
+    wx = widgets.Select(options=cnames,value=cnames[0],description='Abscisse')
+    wy = widgets.Select(options=cnames,value=cnames[1],description='Ordonnée')
+    
+    out = widgets.interactive_output(update_circle,dict(cname1=wx,cname2=wy))
+    boxes = widgets.VBox([widgets.HBox([wx,wy]),out])
+    return boxes
+
+    
 
 
