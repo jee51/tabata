@@ -8,10 +8,10 @@ rem Jupyter widgets extension
 jupyter labextension install @jupyter-widgets/jupyterlab-manager@1.1 --no-build
 
 rem jupyterlab renderer support
-jupyter labextension install jupyterlab-plotly@1.5.0 --no-build
+jupyter labextension install jupyterlab-plotly --no-build
 
 rem FigureWidget support
-jupyter labextension install plotlywidget@1.5.0 --no-build
+jupyter labextension install plotlywidget --no-build
 
 rem Build extensions (must be done to activate extensions since --no-build is used above)
 jupyter lab build
