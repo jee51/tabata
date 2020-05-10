@@ -3,7 +3,7 @@ Tabata est un package qui permet la manipulation de séries de signaux numériqu
 
     tabata
         + notebooks
-        |    + opset_doc + etdex_doc + instants_doc + tubes_doc
+        |    + opset_doc + etdex_doc + instants_doc + tubes_doc + plots_doc
         |    + data
         |         + in (exemple de données)
         |         |   + AFL1EB.h5 (Aircraft FLight 1 Extended & Banalized)
@@ -14,7 +14,7 @@ Tabata est un package qui permet la manipulation de séries de signaux numériqu
         |    + pipupdate.bat
         |    + jupyterlab_plotly_install.bat (plaotly sous jupyterlab)
         + opset.py
-        |    + Opset + nameunit() + selplot() + byunitplot()
+        |    + Opset
         |    + OpsetError
         + etdex.py
         |    + Etdex + nbtranscients() + iterator() + dataiterator() + to_hdf5()
@@ -24,7 +24,10 @@ Tabata est un package qui permet la manipulation de séries de signaux numériqu
         + instants.py
         |    + Selector + indicator()
         + tubes.py
-             + Tube + highlight() + plot() + AppTube
+        |    + Tube + highlight() + AppTube
+        + plots.py
+             + nameunit() + selplot() + byunitplot() + get_colname()
+             + groupplot() + doubleplot()
 
 La plupart des analyses de données travaillent sur un tableau de mesures. Pourtant très souvent on a affaire à une liste de signaux. C'est le cas dans l'aéronautique quand on traite une série de vols (ou d'essais) et que chaque vol remonte un tableau de mesures indexé par le temps, souvent à une fréquence moyenne entre 1 Hz et 100 Hz. On a exactement la même chose quand on veut suivre les données d'usinage issues d'une machine-outil. Dans ce second cas, chaque pièce usinée donne un signal de mesures faites par la machine durant l'opération de production.
 

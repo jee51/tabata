@@ -12,3 +12,4 @@ qui seront ensuite réutilisés. Ces données intermédiaires seront stockées d
 3. **opset_doc** pour apprendre à manipuler des listes de signaux.
 4. **instants_doc** pour extraire des instants caractéristiques interactivement.
 5. **tubes_doc** pour construire un tube de confiance et rechercher les signaux anormaux.
+6. **plots_doc.py** regroupe quelques affichages rapides pour des DataFrames.
