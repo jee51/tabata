@@ -48,7 +48,7 @@ def byunits(cols,sep="["):
 def get_colname(columns,variable,default=0):
     """ Récupère le nom complet de la variable.
     
-        :param columns:  La liste des retours possibles.
+        :param columns:  La liste des retours possibles (on peu passer un df).
         :param variable: Le début du nom rechercé dans la liste.
         :param default:  Un moyen de différentier si on veut une valeur 
                             ou rien quand rien n'est trouvé.
@@ -57,6 +57,9 @@ def get_colname(columns,variable,default=0):
         En posant `Default=None` une entrée vide renvoie le vide.
     """
     
+    if isinstance(columns,pd.DataFrame):
+        df = columns
+        columns = df.columns
     if default is not None and isinstance(default,int):
         default = columns[default]
     if not variable:
@@ -240,6 +243,45 @@ def doubleplot(df1,df2=None,p=0.5,space=0.05,title=None):
     fig.update_layout(showlegend=True)
     fig.show()
     
+
+def tsplot(df,cols=None,title=None):
+    """ Affichage d'une série temporelle."""
+    
+    if isinstance(df,pd.Series):
+        df = pd.DataFrame(df)
+    fig = make_subplots(rows=1,cols=1)
+    if not cols:
+        cols = df.columns
+    else:
+        if isinstance(cols,str):
+            cols = [cols]
+        cols = [get_colname(df.columns,col) for col in cols]
+        
+    [fig.add_trace(go.Scatter(x=df.index,y=df[col],name=col),
+                   row=1,col=1)
+     for col in cols]
+    fig.update_xaxes(
+        title=df.index.name,
+        rangeslider_visible=True,
+        rangeselector=dict(
+            buttons=list([
+                dict(count=1, label="1m", step="month", stepmode="backward"),
+                dict(count=6, label="6m", step="month", stepmode="backward"),
+                dict(count=1, label="YTD", step="year", stepmode="todate"),
+                dict(count=1, label="1y", step="year", stepmode="backward"),
+                dict(step="all")])))
+    
+    if len(cols)==1 or len(set(byunits(cols).keys()))==1:
+        name,unit = nameunit(cols[0])
+        fig.update_yaxes(title_text=unit, row=1, col=1)
+
+    fig.update_layout(showlegend=True)
+    if title:
+        fig.update_layout(titlefont={'color': "blue"},
+                          title_text=title)
+    return fig
+
+
 ###########################################################################
 # Affichages analytiques.
 
@@ -285,8 +327,8 @@ def pcacircle(df,pca=None):
 
         total_variance2 = pca.explained_variance_ratio_[comp1] + \
                           pca.explained_variance_ratio_[comp2]
-        layout = go.Layout(title="Projection dans le plan PC{}xPC{} ({:.1f}%)".\
-                          format(comp1,comp2,total_variance2*100),
+        layout = go.Layout(title="Projection dans le plan PC{} x PC{} ({:.1f}%)".\
+                          format(comp1+1,comp2+1,total_variance2*100),
                           xaxis_title=cnames[comp1],
                           yaxis_title=cnames[comp2],
                           shapes=shapes,
@@ -302,6 +344,5 @@ def pcacircle(df,pca=None):
     boxes = widgets.VBox([widgets.HBox([wx,wy]),out])
     return boxes
 
-    
 
 
