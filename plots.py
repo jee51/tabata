@@ -265,6 +265,11 @@ def tsplot(df,cols=None,title=None):
         rangeslider_visible=True,
         rangeselector=dict(
             buttons=list([
+                dict(count=1, label="sec", step="second", stepmode="backward"),
+                dict(count=1, label="min", step="minute", stepmode="backward"),
+                dict(count=1, label="1h", step="hour", stepmode="backward"),
+                dict(count=1, label="1d", step="day", stepmode="backward"),
+                dict(count=7, label="7d", step="day", stepmode="backward"),
                 dict(count=1, label="1m", step="month", stepmode="backward"),
                 dict(count=6, label="6m", step="month", stepmode="backward"),
                 dict(count=1, label="YTD", step="year", stepmode="todate"),
@@ -285,7 +290,7 @@ def tsplot(df,cols=None,title=None):
 ###########################################################################
 # Affichages analytiques.
 
-def pcacircle(df,pca=None):
+def pcacircle(df,pca=None,sample=0):
     """ Construit le cercle descriptif des composantes d'un ACP.
     
         L'analyse en composante principale peut être directement 
@@ -293,13 +298,14 @@ def pcacircle(df,pca=None):
         est faite.
     """
     
+    X = StandardScaler().fit_transform(df.values)
     if not pca:
-        X = StandardScaler().fit_transform(df.values)
         pca = PCA().fit(X)
 
     cnames = ["PC{} ({:.1f}%)".\
               format(c,pca.explained_variance_ratio_[c-1]*100)
               for c in range(1,pca.n_components_+1)]
+    Z = pca.transform(X)
     
     def update_circle(cname1,cname2):
         
@@ -308,6 +314,14 @@ def pcacircle(df,pca=None):
 
         pc1 = pca.components_[comp1]
         pc2 = pca.components_[comp2]
+        
+        if sample>0:
+            pts = np.random.choice(len(Z),int(len(Z)*sample),False)
+            z1 = Z[pts,comp1]
+            z2 = Z[pts,comp2]
+        else:
+            z1 = []
+            z2 = []
 
         scalex = np.sqrt(pca.explained_variance_[comp1])
         scaley = np.sqrt(pca.explained_variance_[comp2])
@@ -320,6 +334,13 @@ def pcacircle(df,pca=None):
                             line=dict(color="red",width=1,dash="dot"),
                             showlegend=False) for i in range(0,df.shape[1])]
 
+        if sample>0:
+            data3 = [go.Scatter(x = z1*scalex, y=z2*scaley, mode="markers",
+                            marker=dict(color="black", opacity=0.15, size=5), 
+                            showlegend=False)]
+        else:
+            data3 = []
+            
         shapes=[go.layout.Shape(type="circle",
                                 xref="x",yref="y",
                                 x0=-1,y0=-1,x1=1,y1=1,
@@ -332,9 +353,9 @@ def pcacircle(df,pca=None):
                           xaxis_title=cnames[comp1],
                           yaxis_title=cnames[comp2],
                           shapes=shapes,
-                          xaxis=dict(range=[-1,1]),
-                          yaxis=dict(range=[-1,1],scaleanchor="x",scaleratio=1))
-        fig = go.Figure(data+data2,layout)
+                          xaxis=dict(range=[-1.2,1.2]),
+                          yaxis=dict(range=[-1.2,1.2],scaleanchor="x",scaleratio=1))
+        fig = go.Figure(data+data2+data3,layout)
         fig.show()
         
     wx = widgets.Select(options=cnames,value=cnames[0],description='Abscisse')
