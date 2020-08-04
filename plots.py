@@ -332,11 +332,13 @@ def pcacircle(df,pca=None,sample=0):
                            hoverinfo='skip')]
         data2 = [go.Scatter(x=[0,pc1[i]*scalex],y=[0,pc2[i]*scaley],mode="lines",
                             line=dict(color="red",width=1,dash="dot"),
+                            name='var',
                             showlegend=False) for i in range(0,df.shape[1])]
 
         if sample>0:
             data3 = [go.Scatter(x = z1*scalex, y=z2*scaley, mode="markers",
-                            marker=dict(color="black", opacity=0.15, size=5), 
+                            marker=dict(color="black", opacity=0.15, size=5),
+                            name='obs',
                             showlegend=False)]
         else:
             data3 = []
