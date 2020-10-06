@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 """
-BANALISE - DTransformation des données pour un export.
+BANALISE - Transformation des données pour un export.
 
 Created on Mon May 14 17:37:51 2018
 
-@author: s068990
+@author: Jérôme Lacaille
 """
 
 import numpy as np
