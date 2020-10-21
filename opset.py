@@ -429,10 +429,13 @@ class Opset:
         out = widgets.interactive(e['update_function'], 
                                   colname=e['variable_dropdown'], 
                                   sigpos=e['signal_slider'])
-        
         boxes = widgets.VBox([widgets.HBox([e['variable_dropdown'], 
                                             e['previous_button'], 
                                             e['next_button']]),
                               widgets.HBox([f, e['signal_slider']])])
-        
         return boxes
+    
+###########################################################################
+#%% Récupération d'un jeu d'exemples.
+def flightdata():
+    filename = os.path.dirname()
