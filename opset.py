@@ -405,7 +405,7 @@ class Opset:
                     update_function = update_plot)
     
     
-    def plot(self,phase=None,pos=None,name=None):
+    def plotw(self,phase=None,pos=None,name=None):
         """ Affichage de l'interface.
         
             La méthode `plot()` commence par créer les différents éléments par
@@ -436,8 +436,8 @@ class Opset:
         
         return boxes
     
-    def plotc(self,phase=None,pos=None,name=None):
-        
+    def plot(self,phase=None,pos=None,name=None):
+        """ Affichage de l'interface sans passage par FigureWidgets."""
         f = make_subplots(rows=1, cols=1)
         #f = go.FigureWidget(f)
         e = self.make_figure(f, phase,pos,name)
@@ -458,5 +458,6 @@ class Opset:
     
 ###########################################################################
 #%% Récupération d'un jeu d'exemples.
-def flightdata():
-    filename = os.path.join(os.path.dirname(__file__),'notebooks/data/in/AFL1EB.h5')
+def datafile(name=''):
+    filename = os.path.join(os.path.dirname(__file__),'notebooks/data/in/'+name)
+    return filename
