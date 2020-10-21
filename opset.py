@@ -433,9 +433,30 @@ class Opset:
                                             e['previous_button'], 
                                             e['next_button']]),
                               widgets.HBox([f, e['signal_slider']])])
+        
+        return boxes
+    
+    def plotc(self,phase=None,pos=None,name=None):
+        
+        f = make_subplots(rows=1, cols=1)
+        #f = go.FigureWidget(f)
+        e = self.make_figure(f, phase,pos,name)
+        
+        def update_plot_c(colname, sigpos):
+            e['update_function'](colname, sigpos)
+            f.show()
+        
+        out = widgets.interactive_output(update_plot_c, dict(
+                                  colname=e['variable_dropdown'], 
+                                  sigpos=e['signal_slider']))
+        boxes = widgets.VBox([widgets.HBox([e['variable_dropdown'], 
+                                            e['previous_button'], 
+                                            e['next_button']]),
+                              widgets.HBox([out, e['signal_slider']])])
+        
         return boxes
     
 ###########################################################################
 #%% Récupération d'un jeu d'exemples.
 def flightdata():
-    filename = os.path.dirname()
+    filename = os.path.join(os.path.dirname(__file__),'notebooks/data/in/AFL1EB.h5')
