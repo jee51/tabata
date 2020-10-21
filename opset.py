@@ -405,7 +405,7 @@ class Opset:
                     update_function = update_plot)
     
     
-    def plotw(self,phase=None,pos=None,name=None):
+    def plot(self,phase=None,pos=None,name=None):
         """ Affichage de l'interface.
         
             La méthode `plot()` commence par créer les différents éléments par
@@ -436,7 +436,7 @@ class Opset:
         
         return boxes
     
-    def plot(self,phase=None,pos=None,name=None):
+    def plotc(self,phase=None,pos=None,name=None):
         """ Affichage de l'interface sans passage par FigureWidgets."""
         f = make_subplots(rows=1, cols=1)
         #f = go.FigureWidget(f)

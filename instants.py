@@ -735,7 +735,7 @@ class Selector(Opset):
             # Mise à jour des probas.
             self.predict_params['filter_width'] = width
             f.update_traces(x=self.df.index, y=self.belief(), row=2)
-            
+                        
             self.viewed.add(sigpos)
             f.layout.shapes = []
             if self.sigpos in self.selected:
@@ -866,7 +866,6 @@ class Selector(Opset):
             scatter2 = f.data[1]
             scatter2.on_click(selection_fn)
         
-        
         # =================================================================
         # Slider pour la largeur du filtre de croyance.
         wf = widgets.IntSlider(value=self.predict_params['filter_width'], 
@@ -981,4 +980,82 @@ class Selector(Opset):
         
         return tabs
     
+    def plotc(self,phase=None,pos=None,name=None):
+        """ Un plot sans FigureWidget."""
+        f = make_subplots(rows=2, cols=1,
+                          shared_xaxes=True,
+                          vertical_spacing=0.03,
+                          specs=[[{"type": "scatter"}],
+                                [{"type": "scatter"}]])
+        #f = go.FigureWidget(f)
+        e = self.make_figure(f,phase,pos,name)
+        
+        wlmv = e['variable_selection']
+        wbl = e['learn_button']
+        
+        # =================================================================
+        # Slider pour la sélection de points.
+        wsp = widgets.IntSlider(value=0, 
+                               min=0, max=500, step=1,
+                               orientation='horizontal',
+                               description='Point',
+                               continuous_update=False,
+                               layout=widgets.Layout(width='500px'))
+
+        
+        def update_plot_c(colname, sigpos, width, point):
+            
+            # Position depuis le slider.
+           
+            if point>0:
+                L = len(self.df)
+                i1 = int(point*L/500)
+                self.variables.add(self.colname)
+                wlmv.value = tuple(self.variables)
+                self.selected[self.sigpos] = i1
+            else:
+                self.selected.pop(self.sigpos,None)
+            
+            if self.selected:
+                if self._clf:
+                    wbl.description = 'Relearn'
+                    wbl.button_style = 'success'    
+                else:
+                    wbl.description = 'Learn'
+                    wbl.button_style = 'info'
+            else:
+                wbl.description = 'No Target'
+                wbl.button_style = 'danger'  
+                
+            e['update_function'](colname, sigpos, width)
+            
+            f.show()
+            
+            
+        out = widgets.interactive_output(update_plot_c, dict( 
+                                  colname=e['variable_dropdown'], 
+                                  sigpos=e['signal_slider'],
+                                  width=e['filter_slider'],
+                                  point=wsp))
+      
+        boxes = widgets.VBox(
+            [widgets.HBox([e['variable_dropdown'], 
+                          e['previous_button'], e['next_button']]),
+             widgets.HBox([out, e['signal_slider']]),
+             widgets.HBox([widgets.VBox([wsp,e['filter_slider']])])
+            ])
+        
+        params = self.param()
+        
+        learn = widgets.VBox([e['progress_bar'], 
+                              widgets.HBox([e['variable_selection'], 
+                                            widgets.VBox([e['message_label'],
+                                                          e['learn_button']])])])
+                              
+        tabs = widgets.Tab(children = [boxes, params, learn])
+        tabs.set_title(0, "Plot")
+        tabs.set_title(1, "Param")
+        tabs.set_title(2, "Learn")
+        
+        return tabs
     
