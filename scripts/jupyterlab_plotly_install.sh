@@ -24,6 +24,7 @@ conda install -c conda-forge/label/cf202003 jupyterlab-plotly-extension
 # Installation de l'extension ipywidgets
 # --------------------------------------
 
+# Ne pas oublier le plotlywidget pour le FigureWidget.
 # https://discourse.jupyter.org/t/ipywidgets-for-jupyterlab-1-0/1675
 
-jupyter labextension install @jupyter-widgets/jupyterlab-manager
+jupyter labextension install @jupyter-widgets/jupyterlab-manager plotlywidget
