@@ -324,25 +324,27 @@ class Selector(Opset):
                         for s in range_sigma:
                             for e in [1, -1]:
                                 c = indicator(a,w,d+1,e*s*eps,deg_poly)
-                                if Qmin<0.65:
-                                    C = np.vstack((C,c))
-                                if Qmax>0.35:
-                                    c = c[-1]-c
-                                    C = np.vstack((C,c))
-                                if first: # len(k)>0 and k not in K:
+                                if first:
                                     code = '{}o{}'.format(l, d+1)
                                     if e>0:
                                         code = code + 'u{}'.format(s)
                                     else:
                                         code = code + 'd{}'.format(s)
-                                    if Qmin<0.65:
+                                if Qmin<0.65:
+                                    C = np.vstack((C,c))
+                                    if first:
                                         idnames = idnames +\
-                                             ["{}[+w{}]".format(name,code),
-                                              "{}[-w{}]".format(name,code)]
-                                    if Qmax>0.35:
+                                             ["{}[+w{}]".format(name,code)]
                                         idcodes = idcodes +\
-                                            [(colname,  l, d, e*s, eps),
-                                             (colname, -l, d, e*s, eps)]
+                                            [(colname, l, d, e*s, eps)]
+                                if Qmax>0.35:
+                                    c = c[-1]-c
+                                    C = np.vstack((C,c))
+                                    if first:
+                                        idnames = idnames +\
+                                             ["{}[-w{}]".format(name,code)]
+                                        idcodes = idcodes +\
+                                            [(colname, -l, d, e*s, eps)]
             first = False
             dfi = pd.DataFrame(C.T, index=df.index, columns=idnames)
             self.idcodes = idcodes # On sauvegarde les indicateurs.
@@ -625,18 +627,13 @@ class Selector(Opset):
         return dsr.rewind()
     
     
-    def between(self,left,right,filename=None):
-        """ Découpe el signal entre l'instant et une autre borne.
+    def between(self,L,R,filename=None):
+        """ Découpe le signal entre l'instant et une autre borne.
         
-            Les paramètres `left` et `right` doivent être des dictionnaire de
-            sélection ou des Selectors.
+            Les paramètres `L` et `R` doivent être des dictionnaire de
+            sélection.
         """
-
-        if isinstance(left,Selector):
-            left = left.predict()
-        if isinstance(right,Selector):
-            right = right.predict()
-                   
+        
         # Nom du fichier de sauvegarde
         if filename is None:
             i = self.storename.rfind('.')
@@ -646,8 +643,8 @@ class Selector(Opset):
         
         dsb = Opset(filename).clean()
         for df in self:
-            i = left[self.sigpos]
-            j = right[self.sigpos]
+            i = L[self.sigpos]
+            j = R[self.sigpos]
             dsb.put(df.iloc[i:j])
         
         self.rewind(sigpos)
