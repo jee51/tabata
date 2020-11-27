@@ -315,7 +315,7 @@ class Tube(Opset):
             colname = get_colname(self.df.columns,name)
             
         df = self.df
-        if colname not in self._reg:
+        if colname not in self._reg or len(df)==0:
             y = df[colname].values
             z = np.zeros(y.shape)
             z.fill(np.nan)
@@ -466,9 +466,10 @@ class Tube(Opset):
                                line=dict(color='green', 
                                          width=0)), 
                     row=1, col=1)
-        z0 = zmin.min()
-        z1 = zmax.max()
-        f.update_yaxes(range=(z0-0.1*(z1-z0),z1+0.1*(z1-z0)))
+        if len(z)>0:
+            z0 = zmin.min()
+            z1 = zmax.max()
+            f.update_yaxes(range=(z0-0.1*(z1-z0),z1+0.1*(z1-z0)))
             
         # ---- Begin: Callback Interactive  ----
         def update_plot(colname, sigpos):
@@ -486,9 +487,10 @@ class Tube(Opset):
             f.update_traces(selector=dict(name='tubemax'),
                             x = self.df.index,
                             y = zmax-zmin)
-            z0 = zmin.min()
-            z1 = zmax.max()
-            f.update_yaxes(range=(z0-0.1*(z1-z0),z1+0.1*(z1-z0)))
+            if len(z)>0:
+                z0 = zmin.min()
+                z1 = zmax.max()
+                f.update_yaxes(range=(z0-0.1*(z1-z0),z1+0.1*(z1-z0)))
         
             
         # On remplace la fonction d'update (que l'on avait d'abord copiée).
