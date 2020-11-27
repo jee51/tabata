@@ -1,5 +1,8 @@
 # Tabata
 Tabata est un package qui permet la manipulation de séries de signaux numériques.
+C'est essentiellement une toolbox que je développe pour illuster une partie de mes cours de statistique descriptive. 
+Notamment j'y laisse les sujets des examens de ces dernières années.
+On y trouve un peu de machine-learning, un peu de visualisation graphique et beaucoup d'interactivité dans les notebooks Python.
 
     tabata
         + notebooks
@@ -10,7 +13,8 @@ Tabata est un package qui permet la manipulation de séries de signaux numériqu
         |         |
         |         + out (données produites par les notebooks
         |    + exercices
-        |         + examen - M2 - Stats Descriptives (corrigé)
+        |         + examen 20## *
+        |         |   ...
         + scripts
         |    + pip_intall_all.bat (installation des packages utiles)
         |    + pipupdate.bat
