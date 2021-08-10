@@ -102,7 +102,8 @@ def selplot(df, variable=None):
 
     variable = get_colname(list(df.columns),variable)
     wd = widgets.Dropdown(options=df.columns, value=variable, description="Variable :")
-    widgets.interact(selected_plot, col=wd)
+    out = widgets.interactive(selected_plot, col=wd)
+    return out
 
 
 def byunitplot(df, yunit=None, title=""):
