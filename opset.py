@@ -459,5 +459,5 @@ class Opset:
 ###########################################################################
 #%% Récupération d'un jeu d'exemples.
 def datafile(name=''):
-    filename = os.path.join(os.path.dirname(__file__),'notebooks/data/in/'+name)
+    filename = os.path.join(os.path.dirname(__file__),'notebooks/data',name)
     return filename
