@@ -168,3 +168,4 @@ About
 ._*
 .ipynb_checkpoints
 .vscode
+*.code-workspace
