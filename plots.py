@@ -27,7 +27,7 @@ init_notebook_mode(connected=True)
 
 ###########################################################################
 #%% Fonctions auxiliaires.
-def nameunit(col,sep="["):
+def nameunit(col,sep='['):
     """ Renvoie le nom et l'unité d'une variable au format NOM[UNITE]"""
     i = col.find(sep)
     if i == -1:
@@ -35,7 +35,7 @@ def nameunit(col,sep="["):
     return col[:i],col[i+1:-1]
 
 
-def byunits(cols,sep="["):
+def byunits(cols,sep='['):
     """ Récupère un dictionnaire dont les clés sont les unités uniques et
         les valeurs les colonnes correspondates.
     """
@@ -80,7 +80,7 @@ def get_colname(columns,variable,default=0):
 
 ###########################################################################
 #%% Fonctions d'affichage de signaux.
-def selplot(df, variable=None):
+def selplot(df, variable=None, sep='['):
     """ Affiche un signal parmis la liste des signaux disponibles.
 
         :param df:       la table de données.
@@ -93,7 +93,7 @@ def selplot(df, variable=None):
         
             C'est cette fonction qui définit notamment le style du titre et des axes.
         """
-        name, unit = nameunit(col)
+        name, unit = nameunit(col,sep)
         data = [go.Scatter(x=df.index, y=df[col])]
         layout = go.Layout(title=name,
                            titlefont={'color': "blue"},
@@ -110,7 +110,7 @@ def selplot(df, variable=None):
     return out
 
 
-def byunitplot(df, yunit=None, title=""):
+def byunitplot(df, yunit=None, title="", sep='['):
     """ Affiche les signaux en fonction de leur unité.
 
         Au début l'affichage est vide et une question est posée '?',
@@ -123,7 +123,7 @@ def byunitplot(df, yunit=None, title=""):
         :param xunit: l'unité de date.
         :param yunit: l'unité des observations.
     """
-    dnu = byunits(df)
+    dnu = byunits(df,sep)
     units = list(dnu.keys())
     
     def unit_plot(unit, variable):
