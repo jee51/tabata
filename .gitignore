@@ -2,6 +2,7 @@
 **/data/out/*.pkl
 notebooks/Untitled*.ipynb
 **/*~
+Untitled*.ipynb
 
 # byte-compiled / optimized / DLL files
 __pycache__/
@@ -162,3 +163,8 @@ About
 # JetBrain (issu de Global)
 .idea/
 .DS_Store
+
+# VSCode
+._*
+.ipynb_checkpoints
+.vscode
