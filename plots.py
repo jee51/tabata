@@ -22,7 +22,7 @@ import plotly.graph_objs as go
 from plotly.subplots import make_subplots
 from plotly.offline import init_notebook_mode, iplot
 
-init_notebook_mode(connected=True) 
+#init_notebook_mode(connected=True) 
 #import matplotlib.pyplot as plt
 
 ###########################################################################
