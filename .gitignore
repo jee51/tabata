@@ -167,5 +167,5 @@ About
 # VSCode
 ._*
 .ipynb_checkpoints
-.vscode
+.vscode/
 *.code-workspace
