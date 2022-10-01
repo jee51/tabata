@@ -22,7 +22,9 @@ import plotly.graph_objs as go
 from plotly.subplots import make_subplots
 import plotly.io as pio
 #from plotly.offline import init_notebook_mode, iplot
-pio.renderers.default = 'notebook_connected'
+
+if pio.renderers.default == 'vscode':
+    pio.renderers.default = 'notebook_connected'
 
 #init_notebook_mode(connected=True) 
 #import matplotlib.pyplot as plt
