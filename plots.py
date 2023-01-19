@@ -21,9 +21,20 @@ import ipywidgets as widgets
 import plotly.graph_objs as go
 from plotly.subplots import make_subplots
 from plotly.offline import init_notebook_mode, iplot
+import plotly.io as pio
 
-init_notebook_mode(connected=True) 
-#import matplotlib.pyplot as plt
+"""
+if pio.renderers.default == "vscode":
+    # Ca ne marche pas avec vscode !
+    init_notebook_mode(connected=True)
+    pio.renderers.default = "notebook"
+else:
+    init_notebook_mode(connected=True) # Comportement par défaut.
+"""
+
+# Trouvé sur stackoverflow (https://stackoverflow.com/questions/64849484/display-plotly-plot-inside-vs-code)
+pio.renderers.default = "notebook"
+#init_notebook_mode(connected=True)
 
 ###########################################################################
 #%% Fonctions auxiliaires.
