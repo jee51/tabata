@@ -70,7 +70,7 @@ class Opset:
         :var df:       la DataFrame courant (celui qui correspond à `sigpos`.)
     """
 
-    def __init__(self, storename, phase=None, pos=0, name=None):
+    def __init__(self, storename, phase=None, pos=0, name=None, sortkey=None):
         """ Initialisation de l'Opset.
         
             Le constructeur de l'Opset nécessite un fichier HDF5, si le fichier
@@ -96,6 +96,8 @@ class Opset:
         self.storename = storename
         with pd.HDFStore(self.storename, mode='r') as store:
             self.records = store.keys()
+            if sortkey:
+                self.records = sorted(self.records, key=sortkey)
             nbmax = len(self.records)
             if (pos < 0) or (pos >= nbmax):
                 pos = 0
