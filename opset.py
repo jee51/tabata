@@ -84,6 +84,7 @@ class Opset:
                                 renseigne la variable sigpos.
             :param name:      le début d'un nom de variable (colonne du signal)
                                 par défaut (variable colname).
+            :param sortkey:   l'ordre de lecture des enregitrements par 'sorted'.
         """
         
         if isinstance(storename,Opset):
