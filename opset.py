@@ -253,7 +253,7 @@ class Opset:
         
         # Enregistrement du DataFrame.
         self.df = df
-        df.to_hdf(self.storename,record)
+        df.to_hdf(self.storename,key=record)
         
         # Si l'Opset était vide maintenant il faut spécifier une variable.
         self.colname = df.columns[0]
