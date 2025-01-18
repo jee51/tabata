@@ -33,7 +33,8 @@ else:
 """
 
 # Trouvé sur stackoverflow (https://stackoverflow.com/questions/64849484/display-plotly-plot-inside-vs-code)
-pio.renderers.default = "notebook"
+#pio.renderers.default = "notebook"
+#pio.renderers.default = "vscode"
 #init_notebook_mode(connected=True)
 
 ###########################################################################
