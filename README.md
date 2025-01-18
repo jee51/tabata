@@ -63,3 +63,16 @@ Pour tables qui est nécessaire au fonctionnement de pandas avec hdf5, si vous a
 Finalement, sous Windows, il peut rester quelques problèmes, auquel cas, on passe par un raccourci. Vous télécharger le package depuis https://www.lfd.uci.edu/~gohlke/pythonlibs/#pytables et vous l'installez avec wheel. Par exemple pour Python 3.7 :
 
     pip install tables‑3.6.1‑cp37‑cp37m‑win_amd64.whl
+
+** Note pour MACOS + Git **
+
+Les denières versions de GitHub nécessitent un buffer assez large pour pouvoir stocker les images plotly.
+Utiliser la commande 
+
+    git config --global http.postBuffer 157286400
+
+Pour grossir le buffer si vous obtenez le message d'erreur suivant :
+
+    [info] error: RPC failed; HTTP 400 curl 22 The requested URL returned error: 400
+
+(voir [https://](https://thewayeye.net/posts/fixing-the-rpc-failed-http-400-error-in-git/))
