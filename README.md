@@ -75,4 +75,4 @@ Pour grossir le buffer si vous obtenez le message d'erreur suivant :
 
     [info] error: RPC failed; HTTP 400 curl 22 The requested URL returned error: 400
 
-(voir [https://](https://thewayeye.net/posts/fixing-the-rpc-failed-http-400-error-in-git/))
+(voir [thewayeye.net](https://thewayeye.net/posts/fixing-the-rpc-failed-http-400-error-in-git/))
