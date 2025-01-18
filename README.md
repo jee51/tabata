@@ -44,7 +44,7 @@ Le sous-package "tubes" gère les opérations de scoring et de détection de sig
 Les tubes sont encore très rudimentaires, il reste à faire notamment une estimation des bornes statistiquement robuste à partir de valeurs extrêmes et pouvoir transférer un miodèle de tube sur un signal qui n'a pas servi à l'apprentissage. Je mets la plupart de ces choses "à faire" dans les _issues_.
 
 
-**Installation/Requirements.***
+## Installation/Requirements.
 
 Pour faciliter une installation fonctionnelle, j'ai ajouté deux fichiers requirements que vous pouvez utiliser avec conda ou pip respectivement :
 
@@ -64,7 +64,7 @@ Finalement, sous Windows, il peut rester quelques problèmes, auquel cas, on pas
 
     pip install tables‑3.6.1‑cp37‑cp37m‑win_amd64.whl
 
-** Note pour MACOS + Git **
+### Note pour MACOS + Git
 
 Les denières versions de GitHub nécessitent un buffer assez large pour pouvoir stocker les images plotly.
 Utiliser la commande 
