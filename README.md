@@ -11,7 +11,7 @@ On y trouve un peu de machine-learning, un peu de visualisation graphique et bea
         |         + in (exemple de données)
         |         |   + AFL1EB.h5 (Aircraft FLight 1 Extended & Banalized)
         |         |
-        |         + out (données produites par les notebooks
+        |         + out (données produites par les notebooks)
         |    + exercices
         |         + examen 20## *
         |         |   ...
@@ -34,7 +34,7 @@ La plupart des analyses de données travaillent sur un tableau de mesures. Pourt
 
 La première chose à faire quand on dispose de tels listes de signaux et de pouvoir les manipuler et les afficher. L'opset est un raccourci pour "liste d'opérations". Avec l'objet `Opset` il est facile de placer ses signaux stockés dans des DataFrames pandas dans un unique fichier HDF5. L'Opset réfère alors ce fichier et offre des fonctions d'itération et de visualisation.
 
-Le sous-package "instants" contient l'objet `Selector` qui peremt de créer de manière interactive un détecteur d'instants spécifiques. Ce type d'instant correspond à des éléments graphiques visuels qu'un expert est capable d'identifier à l'écran. Le code utilise cet a priori pour construire une règle de décision très simple qui mime le comportement de l'expert.
+Le sous-package "instants" contient l'objet `Selector` qui permet de créer de manière interactive un détecteur d'instants spécifiques. Ce type d'instant correspond à des éléments graphiques visuels qu'un expert est capable d'identifier à l'écran. Le code utilise cet a priori pour construire une règle de décision très simple qui mime le comportement de l'expert.
 
 Le sous-package "tubes" gère les opérations de scoring et de détection de signaux faible à l'aide de tubes de confiances adaptatifs.
 
