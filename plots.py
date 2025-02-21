@@ -107,12 +107,15 @@ def selplot(df, variable=None, sep='['):
         """
         name, unit = nameunit(col,sep)
         data = [go.Scatter(x=df.index, y=df[col])]
-        layout = go.Layout(title=name,
-                           titlefont={'color': "blue"},
-                           xaxis={'title': df.index.name,
-                                  'titlefont': {'color': "blue"}},
-                           yaxis={'title': unit,
-                                  'titlefont': {'color': "blue"}})
+        # layout = go.Layout(title=name,
+        #                    titlefont={'color': "blue"},
+        #                    xaxis={'title': df.index.name,
+        #                           'titlefont': {'color': "blue"}},
+        #                    yaxis={'title': unit,
+        #                           'titlefont': {'color': "blue"}})
+        layout = go.Layout(title={'text': name, 'font': {'color': "blue"}},
+                   xaxis={'title': {'text': df.index.name, 'font': {'color': "blue"}}},
+                   yaxis={'title': {'text': unit, 'font': {'color': "blue"}}})
         fig = go.Figure(data=data, layout=layout)
         fig.show()
 
