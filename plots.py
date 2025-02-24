@@ -92,7 +92,7 @@ def get_colname(columns,variable,default=0):
 
 ###########################################################################
 #%% Fonctions d'affichage de signaux.
-def selplot(df, variable=None, sep='['):
+def selplotc(df, variable=None, sep='['):
     """ Affiche un signal parmis la liste des signaux disponibles.
 
         :param df:       la table de données.
@@ -107,12 +107,6 @@ def selplot(df, variable=None, sep='['):
         """
         name, unit = nameunit(col,sep)
         data = [go.Scatter(x=df.index, y=df[col])]
-        # layout = go.Layout(title=name,
-        #                    titlefont={'color': "blue"},
-        #                    xaxis={'title': df.index.name,
-        #                           'titlefont': {'color': "blue"}},
-        #                    yaxis={'title': unit,
-        #                           'titlefont': {'color': "blue"}})
         layout = go.Layout(title={'text': name, 'font': {'color': "blue"}},
                    xaxis={'title': {'text': df.index.name, 'font': {'color': "blue"}}},
                    yaxis={'title': {'text': unit, 'font': {'color': "blue"}}})
@@ -124,6 +118,41 @@ def selplot(df, variable=None, sep='['):
     out = widgets.interactive(selected_plot, col=wd)
     return out
 
+def selplot(df, variable=None, sep='['):
+    """ Affiche un signal parmis la liste des signaux disponibles.
+
+        :param df:       la table de données.
+        :param variable: une variable à afficher au lieu de la première
+                            colonne de la table.
+    """
+
+    f = make_subplots(rows=1, cols=1)
+    f = go.FigureWidget(f)
+    variable = get_colname(list(df.columns),variable)
+    name, unit = nameunit(variable,sep)
+
+    f.add_trace(go.Scatter(x=df.index, y=df[variable],name="value"),
+                    row=1,col=1)
+    f.update_layout(title={'text': name, 'font': {'color': "blue"}},
+                    xaxis={'title': {'text': df.index.name, 'font': {'color': "blue"}}},
+                    yaxis={'title': {'text': unit, 'font': {'color': "blue"}}})
+                   
+    def selected_plot(col):
+        """ La fonction d'interactivité de `selplot`.
+        
+            C'est cette fonction qui définit notamment le style du titre et des axes.
+        """
+        name, unit = nameunit(col,sep)
+        f.update_traces(selector=dict(name="value"),
+                            x = df.index, y = df[col])
+        f.update_layout(title={'text': name, 'font': {'color': "blue"}},
+                        xaxis={'title': {'text': df.index.name, 'font': {'color': "blue"}}},
+                        yaxis={'title': {'text': unit, 'font': {'color': "blue"}}})
+        
+    wd = widgets.Dropdown(options=df.columns, value=variable, description="Variable :")
+    out = widgets.interactive(selected_plot, col=wd)
+    boxes = widgets.VBox([out,f])
+    return boxes
 
 def byunitplot(df, yunit=None, title="", sep='['):
     """ Affiche les signaux en fonction de leur unité.
