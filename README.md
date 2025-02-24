@@ -38,10 +38,12 @@ Le sous-package "instants" contient l'objet `Selector` qui permet de créer de m
 
 Le sous-package "tubes" gère les opérations de scoring et de détection de signaux faible à l'aide de tubes de confiances adaptatifs.
 
+Le sous-package "plot" offre une liste de fonctions utilitaires pour les affichages.
+
 **Un notebook spécifique détaille chacun de ces packages.**
 
 
-Les tubes sont encore très rudimentaires, il reste à faire notamment une estimation des bornes statistiquement robuste à partir de valeurs extrêmes et pouvoir transférer un miodèle de tube sur un signal qui n'a pas servi à l'apprentissage. Je mets la plupart de ces choses "à faire" dans les _issues_.
+Les tubes sont encore très rudimentaires, il reste à faire notamment une estimation des bornes statistiquement robuste à partir de valeurs extrêmes et pouvoir transférer un modèle de tube sur un signal qui n'a pas servi à l'apprentissage. Je mets la plupart de ces choses "à faire" dans les _issues_.
 
 
 ## Installation/Requirements.
