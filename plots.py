@@ -148,6 +148,7 @@ def selplot(df, variable=None, sep='['):
         f.update_layout(title={'text': name, 'font': {'color': "blue"}},
                         xaxis={'title': {'text': df.index.name, 'font': {'color': "blue"}}},
                         yaxis={'title': {'text': unit, 'font': {'color': "blue"}}})
+        f.show()
         
     wd = widgets.Dropdown(options=df.columns, value=variable, description="Variable :")
     out = widgets.interactive(selected_plot, col=wd)
