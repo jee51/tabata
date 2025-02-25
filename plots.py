@@ -38,7 +38,8 @@ else:
 #init_notebook_mode(connected=True)
 
 ###########################################################################
-#%% Fonctions auxiliaires.
+# Fonctions auxiliaires.
+###########################################################################
 def nameunit(col,sep='['):
     """ Renvoie le nom et l'unité d'une variable au format NOM[UNITE]"""
     i = col.find(sep)
@@ -91,7 +92,8 @@ def get_colname(columns,variable,default=0):
 
 
 ###########################################################################
-#%% Fonctions d'affichage de signaux.
+# Fonctions d'affichage de signaux.
+###########################################################################
 def selplotc(df, variable=None, sep='['):
     """ Affiche un signal parmis la liste des signaux disponibles.
 
@@ -154,6 +156,9 @@ def selplot(df, variable=None, sep='['):
     boxes = widgets.VBox([out,f])
     return boxes
 
+###########################################################################
+# Fonctions d'affichage de signaux par unité
+###########################################################################
 def byunitplot(df, yunit=None, title="", sep='['):
     """ Affiche les signaux en fonction de leur unité.
 
@@ -207,7 +212,9 @@ def byunitplot(df, yunit=None, title="", sep='['):
     boxes = widgets.VBox([widgets.HBox([wu,wv]),out])
     return boxes
 
-    
+###########################################################################
+# Fonctions d'affichage de signaux par groupes 
+###########################################################################
 def groupplot(df,title="",standardize=False):
     """ Un affichage superposant les courbes du DataFrame.
         
@@ -235,7 +242,9 @@ def groupplot(df,title="",standardize=False):
     fig = go.Figure(data,layout)
     fig.show()
     
-
+###########################################################################
+# Fonctions d'affichage de signaux doubles.
+###########################################################################
 def doubleplot(df1,df2=None,p=0.5,space=0.05,title=None):
     """ Affiche un plot en deux graphes liés.
         
@@ -292,7 +301,9 @@ def doubleplot(df1,df2=None,p=0.5,space=0.05,title=None):
     fig.update_layout(showlegend=True)
     fig.show()
     
-
+###########################################################################
+# Fonctions d'affichage de séries temporelles.
+###########################################################################
 def tsplot(df,cols=None,title=None):
     """ Affichage d'une série temporelle."""
     
@@ -337,8 +348,7 @@ def tsplot(df,cols=None,title=None):
 
 
 ###########################################################################
-# Affichages analytiques.
-
+# Affichages d'une PCA.
 def pcacircle(df,pca=None,sample=0):
     """ Construit le cercle descriptif des composantes d'un ACP.
     
