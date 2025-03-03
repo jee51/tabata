@@ -150,6 +150,8 @@ def selplot(df, variable=None, sep='['):
         f.update_layout(title={'text': name, 'font': {'color': "blue"}},
                         xaxis={'title': {'text': df.index.name, 'font': {'color': "blue"}}},
                         yaxis={'title': {'text': unit, 'font': {'color': "blue"}}})
+        f.show()
+        # Est-ce vraiment utile de faire un Vbox (voir Python 3.13).
         
     wd = widgets.Dropdown(options=df.columns, value=variable, description="Variable :")
     out = widgets.interactive(selected_plot, col=wd)
@@ -223,6 +225,7 @@ def groupplot(df,title="",standardize=False):
                             les données.
         :param title:       un titre optionnel.
     """
+    # JL: On peut factoriser la standardisation.
     if standardize:
         data = [go.Scatter(x=df.index, 
                            y=(df[col]-df[col].mean())/df[col].std(),
@@ -255,7 +258,7 @@ def doubleplot(df1,df2=None,p=0.5,space=0.05,title=None):
         :param df2|cols: un autre DataFrame ou les colonnes à extraire du
                          premier.
         :param p:        la proportion de l'espace pour le premier graphe.
-        :param space:    l'espacement vertical entre les deux praphes.
+        :param space:    l'espacement vertical entre les deux graphes.
         :param title:    un titre optionnel.
         
         *Exemples*
@@ -284,6 +287,7 @@ def doubleplot(df1,df2=None,p=0.5,space=0.05,title=None):
     [fig.add_trace(go.Scatter(x=df1.index,y=df1[col],name=col),
                    row=1,col=1)
      for col in df1.columns]
+    # JL: Il faudrait standardiser si les unités sont différentes.
     if len(df1.columns)==1 or len(set(byunits(df2.columns).keys()))==1:
         name,unit = nameunit(df1.columns[0])
         fig.update_yaxes(title_text=unit, row=1, col=1)
@@ -291,6 +295,7 @@ def doubleplot(df1,df2=None,p=0.5,space=0.05,title=None):
     [fig.add_trace(go.Scatter(x=df2.index,y=df2[col],name=col),
                    row=2,col=1)
      for col in df2.columns]
+    # JL: Il faudrait standardiser si les unités sont différentes.
     if len(df2.columns)==1 or len(set(byunits(df2.columns).keys()))==1:
         name,unit = nameunit(df2.columns[0])
         fig.update_yaxes(title_text=unit, row=2, col=1)
@@ -357,6 +362,7 @@ def pcacircle(df,pca=None,sample=0):
         est faite.
     """
     
+    # JL : Qu'en est-il des variables non numériques ?
     X = StandardScaler().fit_transform(df.values)
     if not pca:
         pca = PCA().fit(X)
