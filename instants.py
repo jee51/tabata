@@ -56,17 +56,17 @@ def indicator(y,width,order,sigma,deg=2):
         Cependant, un passage par zéro n'est pas forcément précis, 
         on va donc se donner une marge au dessus et une autre marge au 
         dessous.
-        La marge est un multiple de l'écart-type du signal lissé. Cemme 
+        La marge est un multiple de l'écart-type du signal lissé. Comme 
         cette marge doit être commune à tous les signaux on la calcule à
         l'extérieur.
 
-          z,k = indicator(y,width,order,sigma,deg)
+          z = indicator(y,width,order,sigma,deg)
 
         :param y:     le signal d'entrée.
         :param width: la largeur de bande du filtre.
         :param order: l'ordre de dérivation (1 ou 2).
         :param sigma: un seuil de détection de passage par zéro.
-        :param deg:   le dergé maximal du polynôme de lissage.
+        :param deg:   le degré maximal du polynôme de lissage.
 
         Si le seuil de détection est négatif on étudie les sorties de zéros
         en dessous du seuil.
@@ -158,9 +158,9 @@ class Selector(Opset):
                                     prédictions.
     """
 
-    def __init__(self, storename, phase=None, pos=0, name=""):
+    def __init__(self, storename, phase=None, pos=0, name="", sortkey=None):
         """ Initialise les listes d'instants et d'opération."""
-        super().__init__(storename, phase, pos, name)
+        super().__init__(storename, phase, pos, name, sortkey)
         self.selected = dict()
         self.viewed = set()
         self.variables = set()
@@ -536,7 +536,7 @@ class Selector(Opset):
                                  deriv=1)
         
         p = np.maximum(p,0)
-        Z = p.sum()
+        Z = p.max()
         if Z == 0.0:
             Z=1.0
         p /= Z
