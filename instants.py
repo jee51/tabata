@@ -234,7 +234,7 @@ class Selector(Opset):
             idfilename = self.storename[:i] + '_I' + self.storename[i:]
         
         # Liste des variables
-        colnames = self.variables
+        colnames = list(self.variables)
         # Liste des observations et instants selectionnés
         obs = self.selected.keys()
         ind = self.selected.values()
