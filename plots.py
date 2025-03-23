@@ -22,6 +22,8 @@ import plotly.graph_objs as go
 from plotly.subplots import make_subplots
 from plotly.offline import init_notebook_mode, iplot
 import plotly.io as pio
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 """
 if pio.renderers.default == "vscode":
@@ -150,13 +152,37 @@ def selplot(df, variable=None, sep='['):
         f.update_layout(title={'text': name, 'font': {'color': "blue"}},
                         xaxis={'title': {'text': df.index.name, 'font': {'color': "blue"}}},
                         yaxis={'title': {'text': unit, 'font': {'color': "blue"}}})
-        f.show()
-        # Est-ce vraiment utile de faire un Vbox (voir Python 3.13).
         
     wd = widgets.Dropdown(options=df.columns, value=variable, description="Variable :")
     out = widgets.interactive(selected_plot, col=wd)
-    boxes = widgets.VBox([out,f])
+    boxes = widgets.VBox([wd,f])
     return boxes
+
+def selplotm(df, variable=None, sep='['):
+    """ Affiche un signal parmis la liste des signaux disponibles.
+        Cet affichage utilise Matplotlib
+
+        :param df:       la table de données.
+        :param variable: une variable à afficher au lieu de la première
+                            colonne de la table.
+    """
+
+    def selected_plot(col):
+        """ La fonction d'interactivité de `selplot`.
+        
+            C'est cette fonction qui définit notamment le style du titre et des axes.
+        """
+        name, unit = nameunit(col,sep)
+        sns.set_theme()
+        fig, ax = plt.subplots(figsize=(9,4))
+        sns.lineplot(data=df,x=df.index,y=col)
+        plt.ylabel(unit)
+        plt.title(name)
+
+    variable = get_colname(list(df.columns),variable)
+    wd = widgets.Dropdown(options=df.columns, value=variable, description="Variable :")
+    out = widgets.interactive(selected_plot, col=wd)
+    return out
 
 ###########################################################################
 # Fonctions d'affichage de signaux par unité
@@ -174,9 +200,14 @@ def byunitplot(df, yunit=None, title="", sep='['):
         :param xunit: l'unité de date.
         :param yunit: l'unité des observations.
     """
+
+    f = make_subplots(rows=1, cols=1)
+    f = go.FigureWidget(f)
     dnu = byunits(df,sep)
     units = list(dnu.keys())
-    
+
+
+
     def unit_plot(unit, variable):
         """ Fonction d'interactivité des gadgets."""
         if unit not in dnu:
@@ -195,8 +226,11 @@ def byunitplot(df, yunit=None, title="", sep='['):
                            yaxis={'title': unit,
                                   'titlefont': {'color': "blue"}},
                            showlegend=True)
-        fig = go.Figure(data,layout)
-        fig.show()
+        f.data = []
+        [f.add_trace(trace) for trace in data]
+        f.update_layout(layout)
+
+    unit_plot("m/s","All")
 
     def update_variables(*args):
         """ Fonction de mise à jour des listes déroulantes."""
@@ -211,7 +245,7 @@ def byunitplot(df, yunit=None, title="", sep='['):
  
     wu.observe(update_variables, 'value')
     out = widgets.interactive_output(unit_plot, dict(unit=wu, variable=wv))
-    boxes = widgets.VBox([widgets.HBox([wu,wv]),out])
+    boxes = widgets.VBox([widgets.HBox([wu,wv]),f])
     return boxes
 
 ###########################################################################

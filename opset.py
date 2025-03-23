@@ -44,7 +44,14 @@ class OpsetError(ValueError):
         return """Opset({self.filename})
     {self.message}""".format(self=self)
     
-    
+def update_pandas_index(df):
+    """ UPDATE_PANDAS_INDEX - Correction de régression post 3.9
+    Un code dont on devrait pouvoir se passer qui corrige une régression lors des indexations régulières.
+    """
+    name = df.index.name
+    df.index = pd.to_datetime(df.index.to_numpy())
+    df.index.name = name
+    return df    
 
 ###########################################################################
 #%% Un affichage interactif permettant de visualiser le contenu de la liste.
@@ -104,6 +111,7 @@ class Opset:
                 pos = 0
             if nbmax>0:
                 self.df = store[self.records[pos]]
+                #self.df = update_pandas_index(self.df)
                 colname = get_colname(self.df.columns,name)
                 phase = get_colname(self.df.columns,phase,default=None)
             else:
@@ -156,6 +164,7 @@ class Opset:
             self.sigpos = pos
             rec = self.records[pos]
             self.df = pd.read_hdf(self.storename, rec)
+            #self.df = update_pandas_index(self.df)
             
         return self.df
         
