@@ -22,6 +22,7 @@ import plotly.graph_objs as go
 from plotly.subplots import make_subplots
 from plotly.offline import init_notebook_mode, iplot
 import plotly.io as pio
+import matplotlib.pyplot as plt
 
 """
 if pio.renderers.default == "vscode":
@@ -32,6 +33,47 @@ else:
     init_notebook_mode(connected=True) # Comportement par défaut.
 """
 
+# ---------------------------------------------------------------
+# NOUVELLE FONCTION POUR AFFICHAGE MATPLOTLIB
+def plot_matplotlib(ds, record_index=0, signals=["ALT", "EGT"], save=False, save_path=None):
+    """
+    Affiche plusieurs signaux d'un vol donné via matplotlib.
+
+    :param ds: Instance d'OpSet
+    :param record_index: index du vol à afficher
+    :param signals: liste des noms de signaux à afficher
+    :param save: si True, sauvegarde le graphe
+    :param save_path: chemin du fichier image (optionnel)
+    """
+    record = ds[record_index]
+    time_key = [k for k in record.columns if "Time" in k or "temps" in k.lower()]
+    if not time_key:
+        raise ValueError("Aucune colonne de temps détectée")
+    time = record[time_key[0]]
+
+    plt.figure(figsize=(12, 6))
+    for sig in signals:
+        colname = get_colname(record, sig)
+        if colname in record.columns:
+            plt.plot(time, record[colname], label=colname)
+        else:
+            print(f"Signal non trouvé : {sig}")
+
+    plt.xlabel("Temps")
+    plt.ylabel("Valeurs")
+    plt.title(f"Vol {record_index} - Signaux : {', '.join(signals)}")
+    plt.grid(True)
+    plt.legend()
+    plt.tight_layout()
+
+    if save:
+        if not save_path:
+            save_path = f"record_{record_index}_signals.png"
+        plt.savefig(save_path)
+        print(f"Figure sauvegardée dans {save_path}")
+
+    plt.show()
+    
 # Trouvé sur stackoverflow (https://stackoverflow.com/questions/64849484/display-plotly-plot-inside-vs-code)
 #pio.renderers.default = "notebook"
 #pio.renderers.default = "vscode"
