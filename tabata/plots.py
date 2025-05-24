@@ -23,6 +23,9 @@ from plotly.subplots import make_subplots
 from plotly.offline import init_notebook_mode, iplot
 import plotly.io as pio
 
+
+import matplotlib.pyplot as plt
+
 """
 if pio.renderers.default == "vscode":
     # Ca ne marche pas avec vscode !
@@ -154,6 +157,34 @@ def selplot(df, variable=None, sep='['):
     boxes = widgets.VBox([out,f])
     return boxes
 
+def selplot_matplotlib(df, variable=None, sep='['):
+    """
+    Affiche un signal unique avec matplotlib (équivalent statique de selplot).
+
+    :param df: DataFrame contenant les signaux
+    :param variable: nom (ou préfixe) de la colonne à tracer
+    :param sep: séparateur pour extraire l'unité (par défaut '[')
+    """
+    if isinstance(df, pd.Series):
+        df = pd.DataFrame(df)
+
+    variable = get_colname(df.columns, variable)
+    if variable not in df.columns:
+        raise ValueError(f"Colonne non trouvée : {variable}")
+
+    name, unit = nameunit(variable, sep)
+
+    plt.figure(figsize=(10, 5))
+    plt.plot(df.index, df[variable], label="value")
+
+    plt.title(name, color="blue")
+    plt.xlabel(df.index.name or "Index", color="blue")
+    plt.ylabel(unit, color="blue")
+
+    plt.grid(True)
+    plt.tight_layout()
+    plt.show()
+
 def byunitplot(df, yunit=None, title="", sep='['):
     """ Affiche les signaux en fonction de leur unité.
 
@@ -207,6 +238,40 @@ def byunitplot(df, yunit=None, title="", sep='['):
     boxes = widgets.VBox([widgets.HBox([wu,wv]),out])
     return boxes
 
+import matplotlib.pyplot as plt
+
+def byunitplot_matplotlib(df, yunit=None, title="", sep='['):
+    """
+    Affiche les signaux du DataFrame ayant la même unité, avec matplotlib.
+
+    :param df: DataFrame contenant les signaux
+    :param yunit: unité cible à afficher (ex: 'm', 'K', etc.)
+    :param title: titre de la figure
+    :param sep: séparateur pour parser les noms/units (par défaut '[')
+    """
+    if isinstance(df, pd.Series):
+        df = pd.DataFrame(df)
+
+    dnu = byunits(df.columns, sep)
+    units = list(dnu.keys())
+
+    if yunit is None or yunit not in dnu:
+        raise ValueError(f"Unité '{yunit}' non trouvée. Disponibles : {units}")
+
+    cols = dnu[yunit]
+
+    plt.figure(figsize=(12, 6))
+    for col in cols:
+        name, _ = nameunit(col, sep)
+        plt.plot(df.index, df[col], label=name)
+
+    plt.title(title or f"Signaux avec unité [{yunit}]", color="blue")
+    plt.xlabel(df.index.name or "Index", color="blue")
+    plt.ylabel(f"[{yunit}]", color="blue")
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    plt.show()
     
 def groupplot(df,title="",standardize=False):
     """ Un affichage superposant les courbes du DataFrame.
@@ -234,6 +299,39 @@ def groupplot(df,title="",standardize=False):
                        showlegend=True)
     fig = go.Figure(data,layout)
     fig.show()
+
+import matplotlib.pyplot as plt
+import numpy as np
+
+def groupplot_matplotlib(df, title="", standardize=False):
+    """
+    Un affichage superposant les courbes du DataFrame.
+
+    :param df: DataFrame avec les signaux
+    :param title: titre de la figure
+    :param standardize: si True, standardise chaque série (centrée réduite)
+    """
+    if isinstance(df, pd.Series):
+        df = pd.DataFrame(df)
+
+    plt.figure(figsize=(12, 6))
+
+    for col in df.columns:
+        if np.issubdtype(df[col].dtype, np.number):
+            serie = df[col].dropna()
+            if standardize and serie.std() > 0:
+                values = (serie - serie.mean()) / serie.std()
+            else:
+                values = serie
+            plt.plot(df.index, values, label=col)
+
+    plt.title(title or "Courbes superposées", color="blue")
+    plt.xlabel(df.index.name or "Index", color="blue")
+    plt.ylabel("Valeurs standardisées" if standardize else "Valeurs", color="blue")
+    plt.grid(True)
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
     
 
 def doubleplot(df1,df2=None,p=0.5,space=0.05,title=None):
@@ -291,6 +389,68 @@ def doubleplot(df1,df2=None,p=0.5,space=0.05,title=None):
                           title_text=title)
     fig.update_layout(showlegend=True)
     fig.show()
+
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import matplotlib.gridspec as gridspec
+
+def doubleplot_matplotlib(df1, df2=None, p=0.5, space=0.05, title=None, sep='['):
+    """
+    Affiche deux sous-graphiques verticaux liés par l'axe X (matplotlib).
+
+    :param df1: DataFrame principal ou série
+    :param df2: Autre DataFrame ou liste de colonnes à extraire de df1
+    :param p: Proportion de hauteur pour le haut
+    :param space: Espace entre les deux sous-graphiques
+    :param title: Titre de la figure
+    :param sep: Séparateur pour nom + unité
+    """
+    # Traitement des formats d'entrée
+    if isinstance(df2, str):
+        df2 = [df2]
+    if isinstance(df2, list):
+        cols = [get_colname(df1.columns, c) for c in df2]
+        df2 = df1.copy().drop(cols, axis=1)
+        df1 = df1[cols]
+    if isinstance(df1, pd.Series):
+        df1 = pd.DataFrame(df1)
+    if isinstance(df2, pd.Series):
+        df2 = pd.DataFrame(df2)
+
+    # Préparation de la figure avec GridSpec
+    fig = plt.figure(figsize=(12, 6))
+    gs = gridspec.GridSpec(100, 1)
+    h1 = int(p * 100)
+    h2 = 100 - h1 - int(space * 100)
+
+    ax1 = fig.add_subplot(gs[:h1, 0])
+    ax2 = fig.add_subplot(gs[-h2:, 0], sharex=ax1)
+
+    # Courbes du haut
+    for col in df1.columns:
+        ax1.plot(df1.index, df1[col], label=col)
+    if len(df1.columns) == 1 or len(set(byunits(df1.columns, sep).keys())) == 1:
+        name, unit = nameunit(df1.columns[0], sep)
+        ax1.set_ylabel(unit)
+    ax1.set_title(title or "")
+    ax1.legend()
+    ax1.grid(True)
+
+    # Courbes du bas
+    for col in df2.columns:
+        ax2.plot(df2.index, df2[col], label=col)
+    if len(df2.columns) == 1 or len(set(byunits(df2.columns, sep).keys())) == 1:
+        name, unit = nameunit(df2.columns[0], sep)
+        ax2.set_ylabel(unit)
+    ax2.set_xlabel(df1.index.name or "Index")
+    ax2.legend()
+    ax2.grid(True)
+
+    # plt.tight_layout()
+    # pour éviter un warning tight layout :
+    plt.subplots_adjust(hspace=0.25)  # marge verticale
+    plt.show()
     
 
 def tsplot(df,cols=None,title=None):
@@ -335,6 +495,41 @@ def tsplot(df,cols=None,title=None):
                           title_text=title)
     return fig
 
+def tsplot_matplotlib(df, cols=None, title=None, sep='['):
+    """
+    Affiche une ou plusieurs séries temporelles avec matplotlib.
+
+    :param df: DataFrame contenant les données
+    :param cols: nom(s) de colonnes à afficher (ou None pour toutes)
+    :param title: titre de la figure
+    :param sep: séparateur pour détecter les unités (par défaut '[')
+    """
+    if isinstance(df, pd.Series):
+        df = pd.DataFrame(df)
+
+    # Sélection des colonnes
+    if cols is None:
+        cols = df.columns
+    elif isinstance(cols, str):
+        cols = [cols]
+    cols = [get_colname(df.columns, c) for c in cols]
+
+    # Début du tracé
+    plt.figure(figsize=(12, 6))
+    for col in cols:
+        plt.plot(df.index, df[col], label=col)
+
+    # Déduction d'une unité unique si possible
+    units = list(byunits(cols, sep).keys())
+    y_label = f"[{units[0]}]" if len(units) == 1 else "Valeurs"
+
+    plt.title(title or "Série temporelle", color="blue")
+    plt.xlabel(df.index.name or "Index", color="blue")
+    plt.ylabel(y_label, color="blue")
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    plt.show()
 
 ###########################################################################
 # Affichages analytiques.
@@ -416,5 +611,64 @@ def pcacircle(df,pca=None,sample=0):
     boxes = widgets.VBox([widgets.HBox([wx,wy]),out])
     return boxes
 
+def pcacircle_matplotlib(df, pca=None, comp1=1, comp2=2, sample=0, sep='['):
+    """
+    Affiche le cercle des corrélations d'une ACP avec matplotlib.
 
+    :param df: DataFrame de données numériques
+    :param pca: instance PCA déjà calculée (sinon elle est ajustée automatiquement)
+    :param comp1: numéro de la composante horizontale (commence à 1)
+    :param comp2: numéro de la composante verticale (commence à 1)
+    :param sample: fraction des observations à projeter (0 = aucune)
+    :param sep: séparateur de noms/units pour affichage
+    """
+    X = StandardScaler().fit_transform(df.values)
+    if pca is None:
+        pca = PCA().fit(X)
+
+    Z = pca.transform(X)
+    comp1 -= 1
+    comp2 -= 1
+
+    scalex = np.sqrt(pca.explained_variance_[comp1])
+    scaley = np.sqrt(pca.explained_variance_[comp2])
+
+    pc1 = pca.components_[comp1]
+    pc2 = pca.components_[comp2]
+
+    fig, ax = plt.subplots(figsize=(8, 8))
+
+    # Cercle de corrélation
+    circle = plt.Circle((0, 0), 1, color='lightblue', fill=False, linestyle='--')
+    ax.add_patch(circle)
+
+    # Vecteurs des variables
+    for i, var in enumerate(df.columns):
+        x = pc1[i] * scalex
+        y = pc2[i] * scaley
+        ax.arrow(0, 0, x, y, color='red', alpha=0.7, head_width=0.02, length_includes_head=True)
+        ax.text(x * 1.05, y * 1.05, var, color='red', fontsize=10)
+
+    # Observations (optionnel)
+    if sample > 0:
+        n = int(len(Z) * sample)
+        pts = np.random.choice(len(Z), n, replace=False)
+        ax.scatter(Z[pts, comp1] / scalex, Z[pts, comp2] / scaley,
+                   color='black', alpha=0.15, s=10, label="Observations")
+
+    # Mise en forme
+    total_var = 100 * (pca.explained_variance_ratio_[comp1] +
+                       pca.explained_variance_ratio_[comp2])
+    ax.set_title(f"Plan PC{comp1+1} x PC{comp2+1} ({total_var:.1f} % de variance)", color='blue')
+    ax.set_xlim(-1.2, 1.2)
+    ax.set_ylim(-1.2, 1.2)
+    ax.set_xlabel(f"PC{comp1+1} ({pca.explained_variance_ratio_[comp1]*100:.1f}%)")
+    ax.set_ylabel(f"PC{comp2+1} ({pca.explained_variance_ratio_[comp2]*100:.1f}%)")
+    ax.set_aspect('equal')
+    ax.grid(True)
+    ax.axhline(0, color='grey', lw=1)
+    ax.axvline(0, color='grey', lw=1)
+
+    plt.tight_layout()
+    plt.show()
 

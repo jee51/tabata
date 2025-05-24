@@ -36,8 +36,8 @@ import plotly.graph_objs as go
 from plotly.subplots import make_subplots
 from scipy import signal
 from sklearn import tree
-from .opset import Opset, OpsetError
-from .plots import nameunit
+from tabata.opset import Opset, OpsetError
+from tabata.plots import nameunit
 
 
 ###########################################################################
