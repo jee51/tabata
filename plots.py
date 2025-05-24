@@ -23,7 +23,6 @@ from plotly.subplots import make_subplots
 from plotly.offline import init_notebook_mode, iplot
 import plotly.io as pio
 
-
 import matplotlib.pyplot as plt
 
 """
@@ -151,11 +150,12 @@ def selplot(df, variable=None, sep='['):
         f.update_layout(title={'text': name, 'font': {'color': "blue"}},
                         xaxis={'title': {'text': df.index.name, 'font': {'color': "blue"}}},
                         yaxis={'title': {'text': unit, 'font': {'color': "blue"}}})
+        f.show()
         
     wd = widgets.Dropdown(options=df.columns, value=variable, description="Variable :")
     out = widgets.interactive(selected_plot, col=wd)
-    boxes = widgets.VBox([out,f])
-    return boxes
+    #boxes = widgets.VBox([out,f])
+    return out
 
 def selplot_matplotlib(df, variable=None, sep='['):
     """
