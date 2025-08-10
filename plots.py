@@ -10,7 +10,7 @@ La plupart de ces afficjhages utilisent des DataFrames pandas.
 """
 
 __date__ = "2020-05-09"
-__version__ = '1.0.0'
+__version__ = '1.1.1
 
 import os
 import numpy as np
@@ -22,8 +22,8 @@ import plotly.graph_objs as go
 from plotly.subplots import make_subplots
 from plotly.offline import init_notebook_mode, iplot
 import plotly.io as pio
-
 import matplotlib.pyplot as plt
+import seaborn as sns
 
 """
 if pio.renderers.default == "vscode":
@@ -40,7 +40,8 @@ else:
 #init_notebook_mode(connected=True)
 
 ###########################################################################
-#%% Fonctions auxiliaires.
+# Fonctions auxiliaires.
+###########################################################################
 def nameunit(col,sep='['):
     """ Renvoie le nom et l'unité d'une variable au format NOM[UNITE]"""
     i = col.find(sep)
@@ -93,7 +94,8 @@ def get_colname(columns,variable,default=0):
 
 
 ###########################################################################
-#%% Fonctions d'affichage de signaux.
+# Fonctions d'affichage de signaux.
+###########################################################################
 def selplotc(df, variable=None, sep='['):
     """ Affiche un signal parmis la liste des signaux disponibles.
 
@@ -154,37 +156,39 @@ def selplot(df, variable=None, sep='['):
         
     wd = widgets.Dropdown(options=df.columns, value=variable, description="Variable :")
     out = widgets.interactive(selected_plot, col=wd)
-    #boxes = widgets.VBox([out,f])
+    boxes = widgets.VBox([out,f])
+    return boxes
+    
+
+def selplotm(df, variable=None, sep='['):
+    """ Affiche un signal parmis la liste des signaux disponibles.
+        Cet affichage utilise Matplotlib
+
+        :param df:       la table de données.
+        :param variable: une variable à afficher au lieu de la première
+                            colonne de la table.
+    """
+
+    def selected_plot(col):
+        """ La fonction d'interactivité de `selplot`.
+        
+            C'est cette fonction qui définit notamment le style du titre et des axes.
+        """
+        name, unit = nameunit(col,sep)
+        sns.set_theme()
+        fig, ax = plt.subplots(figsize=(9,4))
+        sns.lineplot(data=df,x=df.index,y=col)
+        plt.ylabel(unit)
+        plt.title(name)
+
+    variable = get_colname(list(df.columns),variable)
+    wd = widgets.Dropdown(options=df.columns, value=variable, description="Variable :")
+    out = widgets.interactive(selected_plot, col=wd)
     return out
 
-def selplot_matplotlib(df, variable=None, sep='['):
-    """
-    Affiche un signal unique avec matplotlib (équivalent statique de selplot).
-
-    :param df: DataFrame contenant les signaux
-    :param variable: nom (ou préfixe) de la colonne à tracer
-    :param sep: séparateur pour extraire l'unité (par défaut '[')
-    """
-    if isinstance(df, pd.Series):
-        df = pd.DataFrame(df)
-
-    variable = get_colname(df.columns, variable)
-    if variable not in df.columns:
-        raise ValueError(f"Colonne non trouvée : {variable}")
-
-    name, unit = nameunit(variable, sep)
-
-    plt.figure(figsize=(10, 5))
-    plt.plot(df.index, df[variable], label="value")
-
-    plt.title(name, color="blue")
-    plt.xlabel(df.index.name or "Index", color="blue")
-    plt.ylabel(unit, color="blue")
-
-    plt.grid(True)
-    plt.tight_layout()
-    plt.show()
-
+###########################################################################
+# Fonctions d'affichage de signaux par unité
+###########################################################################
 def byunitplot(df, yunit=None, title="", sep='['):
     """ Affiche les signaux en fonction de leur unité.
 
@@ -198,9 +202,14 @@ def byunitplot(df, yunit=None, title="", sep='['):
         :param xunit: l'unité de date.
         :param yunit: l'unité des observations.
     """
+
+    f = make_subplots(rows=1, cols=1)
+    f = go.FigureWidget(f)
     dnu = byunits(df,sep)
     units = list(dnu.keys())
-    
+
+
+
     def unit_plot(unit, variable):
         """ Fonction d'interactivité des gadgets."""
         if unit not in dnu:
@@ -219,8 +228,11 @@ def byunitplot(df, yunit=None, title="", sep='['):
                            yaxis={'title': unit,
                                   'titlefont': {'color': "blue"}},
                            showlegend=True)
-        fig = go.Figure(data,layout)
-        fig.show()
+        f.data = []
+        [f.add_trace(trace) for trace in data]
+        f.update_layout(layout)
+
+    unit_plot("m/s","All")
 
     def update_variables(*args):
         """ Fonction de mise à jour des listes déroulantes."""
@@ -235,12 +247,11 @@ def byunitplot(df, yunit=None, title="", sep='['):
  
     wu.observe(update_variables, 'value')
     out = widgets.interactive_output(unit_plot, dict(unit=wu, variable=wv))
-    boxes = widgets.VBox([widgets.HBox([wu,wv]),out])
+    boxes = widgets.VBox([widgets.HBox([wu,wv]),f])
     return boxes
 
-import matplotlib.pyplot as plt
 
-def byunitplot_matplotlib(df, yunit=None, title="", sep='['):
+def byunitplotm(df, yunit=None, title="", sep='['):
     """
     Affiche les signaux du DataFrame ayant la même unité, avec matplotlib.
 
@@ -273,6 +284,9 @@ def byunitplot_matplotlib(df, yunit=None, title="", sep='['):
     plt.tight_layout()
     plt.show()
     
+###########################################################################
+# Fonctions d'affichage de signaux par groupes 
+###########################################################################
 def groupplot(df,title="",standardize=False):
     """ Un affichage superposant les courbes du DataFrame.
         
@@ -281,6 +295,7 @@ def groupplot(df,title="",standardize=False):
                             les données.
         :param title:       un titre optionnel.
     """
+    # JL: On peut factoriser la standardisation.
     if standardize:
         data = [go.Scatter(x=df.index, 
                            y=(df[col]-df[col].mean())/df[col].std(),
@@ -300,10 +315,8 @@ def groupplot(df,title="",standardize=False):
     fig = go.Figure(data,layout)
     fig.show()
 
-import matplotlib.pyplot as plt
-import numpy as np
 
-def groupplot_matplotlib(df, title="", standardize=False):
+def groupplotm(df, title="", standardize=False):
     """
     Un affichage superposant les courbes du DataFrame.
 
@@ -333,7 +346,9 @@ def groupplot_matplotlib(df, title="", standardize=False):
     plt.tight_layout()
     plt.show()
     
-
+###########################################################################
+# Fonctions d'affichage de signaux doubles.
+###########################################################################
 def doubleplot(df1,df2=None,p=0.5,space=0.05,title=None):
     """ Affiche un plot en deux graphes liés.
         
@@ -344,7 +359,7 @@ def doubleplot(df1,df2=None,p=0.5,space=0.05,title=None):
         :param df2|cols: un autre DataFrame ou les colonnes à extraire du
                          premier.
         :param p:        la proportion de l'espace pour le premier graphe.
-        :param space:    l'espacement vertical entre les deux praphes.
+        :param space:    l'espacement vertical entre les deux graphes.
         :param title:    un titre optionnel.
         
         *Exemples*
@@ -373,6 +388,7 @@ def doubleplot(df1,df2=None,p=0.5,space=0.05,title=None):
     [fig.add_trace(go.Scatter(x=df1.index,y=df1[col],name=col),
                    row=1,col=1)
      for col in df1.columns]
+    # JL: Il faudrait standardiser si les unités sont différentes.
     if len(df1.columns)==1 or len(set(byunits(df2.columns).keys()))==1:
         name,unit = nameunit(df1.columns[0])
         fig.update_yaxes(title_text=unit, row=1, col=1)
@@ -380,6 +396,7 @@ def doubleplot(df1,df2=None,p=0.5,space=0.05,title=None):
     [fig.add_trace(go.Scatter(x=df2.index,y=df2[col],name=col),
                    row=2,col=1)
      for col in df2.columns]
+    # JL: Il faudrait standardiser si les unités sont différentes.
     if len(df2.columns)==1 or len(set(byunits(df2.columns).keys()))==1:
         name,unit = nameunit(df2.columns[0])
         fig.update_yaxes(title_text=unit, row=2, col=1)
@@ -390,12 +407,8 @@ def doubleplot(df1,df2=None,p=0.5,space=0.05,title=None):
     fig.update_layout(showlegend=True)
     fig.show()
 
-import matplotlib.pyplot as plt
-import numpy as np
-import pandas as pd
-import matplotlib.gridspec as gridspec
 
-def doubleplot_matplotlib(df1, df2=None, p=0.5, space=0.05, title=None, sep='['):
+def doubleplotm(df1, df2=None, p=0.5, space=0.05, title=None, sep='['):
     """
     Affiche deux sous-graphiques verticaux liés par l'axe X (matplotlib).
 
@@ -452,7 +465,9 @@ def doubleplot_matplotlib(df1, df2=None, p=0.5, space=0.05, title=None, sep='[')
     plt.subplots_adjust(hspace=0.25)  # marge verticale
     plt.show()
     
-
+###########################################################################
+# Fonctions d'affichage de séries temporelles.
+###########################################################################
 def tsplot(df,cols=None,title=None):
     """ Affichage d'une série temporelle."""
     
@@ -495,7 +510,7 @@ def tsplot(df,cols=None,title=None):
                           title_text=title)
     return fig
 
-def tsplot_matplotlib(df, cols=None, title=None, sep='['):
+def tsplotm(df, cols=None, title=None, sep='['):
     """
     Affiche une ou plusieurs séries temporelles avec matplotlib.
 
@@ -532,8 +547,7 @@ def tsplot_matplotlib(df, cols=None, title=None, sep='['):
     plt.show()
 
 ###########################################################################
-# Affichages analytiques.
-
+# Affichages d'une PCA.
 def pcacircle(df,pca=None,sample=0):
     """ Construit le cercle descriptif des composantes d'un ACP.
     
@@ -542,6 +556,7 @@ def pcacircle(df,pca=None,sample=0):
         est faite.
     """
     
+    # JL : Qu'en est-il des variables non numériques ?
     X = StandardScaler().fit_transform(df.values)
     if not pca:
         pca = PCA().fit(X)
@@ -611,7 +626,7 @@ def pcacircle(df,pca=None,sample=0):
     boxes = widgets.VBox([widgets.HBox([wx,wy]),out])
     return boxes
 
-def pcacircle_matplotlib(df, pca=None, comp1=1, comp2=2, sample=0, sep='['):
+def pcacirclem(df, pca=None, comp1=1, comp2=2, sample=0, sep='['):
     """
     Affiche le cercle des corrélations d'une ACP avec matplotlib.
 
