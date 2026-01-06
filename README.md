@@ -19,16 +19,17 @@ On y trouve un peu de machine-learning, un peu de visualisation graphique et bea
         |    + pip_intall_all.bat (installation des packages utiles)
         |    + pipupdate.bat
         |    + jupyterlab_plotly_install.bat (plaotly sous jupyterlab)
-        + opset.py
-        |    + Opset
-        |    + OpsetError
-        + instants.py
-        |    + Selector + indicator()
-        + tubes.py
-        |    + Tube + highlight() + AppTube
-        + plots.py
-             + nameunit() + selplot() + byunitplot() + get_colname()
-             + groupplot() + doubleplot()
+        + tabata
+        |   + opset.py
+        |       + Opset
+        |       + OpsetError
+        |   + instants.py
+        |       + Selector + indicator()
+        |   + tubes.py
+        |       + Tube + highlight() + AppTube
+        |   + plots.py
+        |       + nameunit() + selplot() + byunitplot() + get_colname()
+        |       + groupplot() + doubleplot()
 
 La plupart des analyses de données travaillent sur un tableau de mesures. Pourtant très souvent on a affaire à une liste de signaux. C'est le cas dans l'aéronautique quand on traite une série de vols (ou d'essais) et que chaque vol remonte un tableau de mesures indexé par le temps, souvent à une fréquence moyenne entre 1 Hz et 100 Hz. On a exactement la même chose quand on veut suivre les données d'usinage issues d'une machine-outil. Dans ce second cas, chaque pièce usinée donne un signal de mesures faites par la machine durant l'opération de production.
 
@@ -48,23 +49,26 @@ Les tubes sont encore très rudimentaires, il reste à faire notamment une estim
 
 ## Installation/Requirements.
 
-Pour faciliter une installation fonctionnelle, j'ai ajouté deux fichiers requirements que vous pouvez utiliser avec conda ou pip respectivement :
+The library can be easily installed using standard pip functionality. One is advised to consider installing the library in a new virtual environment, which can be created as follows:
 
-    conda create --name <env> --file requirements_conda.txt
+```
+python3 -m venv env
+source env/bin/activate 
+```
 
-ou
+Then, install the library as follows; observe that pip is responsible for installing the required dependencies:
 
-    python3 -m venv env
-    source env/bin/activate 
-    pip install -r requirements.txt
+```
+pip install path/to/tabata/
+```
 
-Pour tables qui est nécessaire au fonctionnement de pandas avec hdf5, si vous avez un problème, vous pouvez essayer ceci :
+One can also consider installing the package in developper mode, so that new changes to the baseline code reflect directly in the installed package functionality:
 
-    pip install git+https://github.com/PyTables/PyTables.git@develop#egg=tables
+```
+pip install -e path/to/tabata/
+```
 
-Finalement, sous Windows, il peut rester quelques problèmes, auquel cas, on passe par un raccourci. Vous télécharger le package depuis https://www.lfd.uci.edu/~gohlke/pythonlibs/#pytables et vous l'installez avec wheel. Par exemple pour Python 3.7 :
-
-    pip install tables‑3.6.1‑cp37‑cp37m‑win_amd64.whl
+Where `-e` or `--editable` stands for developpment mode, in which the source code can be edited.
 
 ### Note pour MACOS + Git
 
