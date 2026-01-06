@@ -56,10 +56,10 @@ python3 -m venv env
 source env/bin/activate 
 ```
 
-Then, install the library as follows:
+Then, install the library as follows; observe that pip is responsible for installing the required dependencies:
 
 ```
-pip install path/to/tabata
+pip install path/to/tabata/
 ```
 
 One can also consider installing the package in developper mode, so that new changes to the baseline code reflect directly in the installed package functionality:
