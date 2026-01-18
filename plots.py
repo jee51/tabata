@@ -24,8 +24,10 @@ from plotly.offline import init_notebook_mode, iplot
 import plotly.io as pio
 
 import matplotlib.pyplot as plt
+import matplotlib.gridspec as gridspec
 
-"""
+# Initialisation de plotly pour les notebooks.
+""" 
 if pio.renderers.default == "vscode":
     # Ca ne marche pas avec vscode !
     init_notebook_mode(connected=True)
@@ -157,7 +159,7 @@ def selplot(df, variable=None, sep='['):
     #boxes = widgets.VBox([out,f])
     return out
 
-def selplot_matplotlib(df, variable=None, sep='['):
+def selplotm(df, variable=None, sep='['):
     """
     Affiche un signal unique avec matplotlib (équivalent statique de selplot).
 
@@ -238,9 +240,7 @@ def byunitplot(df, yunit=None, title="", sep='['):
     boxes = widgets.VBox([widgets.HBox([wu,wv]),out])
     return boxes
 
-import matplotlib.pyplot as plt
-
-def byunitplot_matplotlib(df, yunit=None, title="", sep='['):
+def byunitplotm(df, yunit=None, title="", sep='['):
     """
     Affiche les signaux du DataFrame ayant la même unité, avec matplotlib.
 
@@ -300,10 +300,8 @@ def groupplot(df,title="",standardize=False):
     fig = go.Figure(data,layout)
     fig.show()
 
-import matplotlib.pyplot as plt
-import numpy as np
 
-def groupplot_matplotlib(df, title="", standardize=False):
+def groupplotm(df, title="", standardize=False):
     """
     Un affichage superposant les courbes du DataFrame.
 
@@ -390,12 +388,8 @@ def doubleplot(df1,df2=None,p=0.5,space=0.05,title=None):
     fig.update_layout(showlegend=True)
     fig.show()
 
-import matplotlib.pyplot as plt
-import numpy as np
-import pandas as pd
-import matplotlib.gridspec as gridspec
 
-def doubleplot_matplotlib(df1, df2=None, p=0.5, space=0.05, title=None, sep='['):
+def doubleplotm(df1, df2=None, p=0.5, space=0.05, title=None, sep='['):
     """
     Affiche deux sous-graphiques verticaux liés par l'axe X (matplotlib).
 
@@ -495,7 +489,7 @@ def tsplot(df,cols=None,title=None):
                           title_text=title)
     return fig
 
-def tsplot_matplotlib(df, cols=None, title=None, sep='['):
+def tsplotm(df, cols=None, title=None, sep='['):
     """
     Affiche une ou plusieurs séries temporelles avec matplotlib.
 
@@ -611,7 +605,7 @@ def pcacircle(df,pca=None,sample=0):
     boxes = widgets.VBox([widgets.HBox([wx,wy]),out])
     return boxes
 
-def pcacircle_matplotlib(df, pca=None, comp1=1, comp2=2, sample=0, sep='['):
+def pcacirclem(df, pca=None, comp1=1, comp2=2, sample=0, sep='['):
     """
     Affiche le cercle des corrélations d'une ACP avec matplotlib.
 
@@ -672,3 +666,5 @@ def pcacircle_matplotlib(df, pca=None, comp1=1, comp2=2, sample=0, sep='['):
     plt.tight_layout()
     plt.show()
 
+
+# %%
