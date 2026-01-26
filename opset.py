@@ -15,6 +15,7 @@ la recherche.
 1.0.3 - Algorithmes d'instants.
 1.0.4 - Indextion négative et itération avec retour à l'origine.
 1.0.5 - Réintégration des plots de DataFrames dans plots.py.
+1.0.6 - Correction d'un bug dans put().
 
 
 Created on Wed May  9 16:50:34 2018
@@ -22,8 +23,8 @@ Created on Wed May  9 16:50:34 2018
 @author: Jérôme Lacaille
 """
 
-__date__ = "2020-05-10"
-__version__ = '1.0.5'
+__date__ = "2026-01-26"
+__version__ = '1.0.6'
 
 import os
 import numpy as np
