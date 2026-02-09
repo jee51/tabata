@@ -56,17 +56,17 @@ def indicator(y,width,order,sigma,deg=2):
         Cependant, un passage par zéro n'est pas forcément précis, 
         on va donc se donner une marge au dessus et une autre marge au 
         dessous.
-        La marge est un multiple de l'écart-type du signal lissé. Cemme 
+        La marge est un multiple de l'écart-type du signal lissé. Comme 
         cette marge doit être commune à tous les signaux on la calcule à
         l'extérieur.
 
-          z,k = indicator(y,width,order,sigma,deg)
+          z = indicator(y,width,order,sigma,deg)
 
         :param y:     le signal d'entrée.
         :param width: la largeur de bande du filtre.
         :param order: l'ordre de dérivation (1 ou 2).
         :param sigma: un seuil de détection de passage par zéro.
-        :param deg:   le dergé maximal du polynôme de lissage.
+        :param deg:   le degré maximal du polynôme de lissage.
 
         Si le seuil de détection est négatif on étudie les sorties de zéros
         en dessous du seuil.
@@ -124,7 +124,7 @@ class Selector(Opset):
         Maintenir la liste des signaux vraiment observés est une information
         qui permet d'utiliser des données vues par l'utilisateur, mais qu'il
         n'a pas jugé utile de sélectionner. Cela donnera une pondération à
-        la vaildation de l'algorithme.
+        la validation de l'algorithme.
         
         La position réelle sélectionnée est la position sur la courbe
         sélectionnée. Elle peut être différente de la position dans le
@@ -286,9 +286,10 @@ class Selector(Opset):
                                                  polyorder=deg_poly,
                                                  deriv=d+1)
                         c = signal.savgol_filter(b,
-                                                 window_length=w,
+                                                 window_length=2*w+1, # w ?
                                                  polyorder=deg_poly,
-                                                 deriv=0)
+                                                 deriv=d+1) # 0 ?
+                        # Risque de bug ici.
                         r = r + [np.std(b-c)]
                     R[d,i] = max(r)
             epsilon[w] = R
@@ -348,7 +349,7 @@ class Selector(Opset):
             first = False
             dfi = pd.DataFrame(C.T, index=df.index, columns=idnames)
             self.idcodes = idcodes # On sauvegarde les indicateurs.
-            dsi.put(dfi) # Le nm de l'opération est dans l'index.
+            dsi.put(dfi) # Le nom de l'opération est dans l'index.
         
         # Pour visualiser les données sur les signaux 
         # on conserve les instants sélectionnés.
@@ -367,7 +368,7 @@ class Selector(Opset):
             observées ne sont plus les mêmes.
             
             Plusieurs arbres de décision sont d'abord testés pour extraire
-            une liste réduite d'indicateurs pertinets. Ensuite on recrée un
+            une liste réduite d'indicateurs pertinents. Ensuite on recrée un
             arbre définitif à partir de cette sous-sélection.
         """
         
